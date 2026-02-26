@@ -198,7 +198,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             parts.append(f"\U0001f69a Supplier {shipped:.0f} (cap {pc:.0f}).")
         if ship_out > 0.5:
             mode = "smart" if smart_distrib else "push 50/50"
-            parts.append(f"\U0001f4e6 CW\u2192A:{alloc_a:.0f} B:{alloc_b:.0f} ({mode}).")
+            parts.append(f"\U0001f4e6 Warehouse\u2192A:{alloc_a:.0f} B:{alloc_b:.0f} ({mode}).")
         s['comment'] = " ".join(parts)
         states.append(s)
 
@@ -307,7 +307,7 @@ def make_sc_html(state, params):
         {arr}
         {pipe_html(state['fp_pipe'], H_FP, f"Finish {params['fp_lt']}wk")}
         {arr}
-        {stage_card("CW", state['cw_stock'], H_CW, "\U0001f3ec", "Flow-thru")}
+        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", "Flow-thru")}
     </div>'''
 
     # Fork: CW → Dist A → Store A  /  CW → Dist B → Store B
@@ -357,7 +357,7 @@ with st.sidebar:
 
     st.markdown("### \U0001f4e6 Initial Stock")
     init_store = st.slider("Store (total, split 50/50)", 0, 3000, 1500, 50)
-    init_cw = st.slider("CW (Finished)", 0, 1000, 0, 50)
+    init_cw = st.slider("Central Warehouse (Finished)", 0, 1000, 0, 50)
     init_semi = st.slider("Semi-Finished (WIP)", 0, 1000, 0, 50)
     init_rawmat = st.slider("Raw Material", 0, 1000, 0, 50)
     total_init = init_store + init_cw + init_semi + init_rawmat
@@ -367,9 +367,9 @@ with st.sidebar:
     store_a_pct = st.slider("Store A demand (%)", 0, 100, 50, 5)
     smart_distrib = st.toggle("Smart Distribution (need-based)", value=False)
     if smart_distrib:
-        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — CW allocates by net need")
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — Warehouse allocates by net need")
     else:
-        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — CW allocates 50/50 (push)")
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — Warehouse allocates 50/50 (push)")
 
     st.markdown("### \U0001f517 Lead Times (weeks)")
     c1, c2 = st.columns(2)
@@ -490,7 +490,7 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-st.components.v1.html(make_sc_html(state, params), height=280, scrolling=False)
+st.components.v1.html(make_sc_html(state, params), height=365, scrolling=False)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -627,7 +627,7 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
                 'StoreA%': f"{p['store_a_pct']}%",
                 'Distrib': 'Smart' if p.get('smart_distrib', False) else 'Push',
                 'Store Init': p['init_store'],
-                'CW': p['init_cw'], 'Semi': p['init_semi'], 'RM': p['init_rawmat'],
+                'Whouse': p['init_cw'], 'Semi': p['init_semi'], 'RM': p['init_rawmat'],
                 'Freq': f"{p['order_freq']}wk",
                 'Mat LT': p['mat_lt'], 'Semi LT': p['semi_lt'],
                 'FP LT': p['fp_lt'], 'Dist LT': p['dist_lt'],
