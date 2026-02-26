@@ -185,13 +185,7 @@ def make_sc_html(state, params):
         def box(i):
             sty, txt = pipe_box_style(pipe[i], hue)
             return f'<div style="width:28px;height:28px;{sty}border:1px solid hsl({hue},20%,80%);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;">{txt}</div>'
-        if n <= 4:
-            inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
-        else:
-            h = math.ceil(n/2)
-            r1 = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(h)) + '</div>'
-            r2 = '<div style="display:flex;gap:2px;justify-content:center;margin-top:1px;">' + "".join(box(i) for i in range(h,n)) + '</div>'
-            inner = r1 + r2
+        inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
         return f'<div style="text-align:center;flex:0 1 auto;min-width:32px;"><div style="font-size:7px;color:#8a96a6;margin-bottom:2px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
 
     def stage_card(title, stock, hue, icon, sub="", alert=""):
