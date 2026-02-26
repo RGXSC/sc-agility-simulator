@@ -167,7 +167,7 @@ def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, tot
 
 
 # ════════════════════════════════════════════════════════════════
-# SC VISUALIZATION — Full-width, CUSTOMER ◂◂◂ SUPPLIER
+# SC VISUALIZATION — Full-width, SUPPLIER ▸▸▸ CUSTOMER
 # Physical flow: right-to-left (demand-driven perspective)
 # Info flow: left-to-right
 # ════════════════════════════════════════════════════════════════
@@ -207,7 +207,7 @@ def make_sc_html(state, params):
             {'<div style="font-size:8px;color:hsl(0,60%,45%);font-weight:700;margin-top:1px;">'+alert+'</div>' if alert else ''}
         </div>'''
 
-    arr = '<div style="color:#b0bac6;font-size:14px;display:flex;align-items:center;flex:0 0 auto;">\u25c2</div>'
+    arr = '<div style="color:#b0bac6;font-size:14px;display:flex;align-items:center;flex:0 0 auto;">\u25b8</div>'
 
     H_S = 215; H_DI = 255; H_CW = 42; H_FP = 38; H_SE = 24; H_RM = 18; H_SU = 145
 
@@ -215,38 +215,38 @@ def make_sc_html(state, params):
     order_html = f"<b style='color:hsl(145,55%,35%);'>ORDER {state['order']:.0f}</b>" if state['order'] > 0 else "<span style='color:#b0b8c4;'>No order</span>"
 
     info_bar = f'''<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 12px;
-        background:linear-gradient(90deg,hsl(215,25%,96%),hsl(145,15%,97%));
+        background:linear-gradient(90deg,hsl(145,15%,97%),hsl(215,25%,96%));
         border:1px solid hsl(215,20%,89%);border-radius:7px;margin-bottom:6px;">
-        <span style="font-size:8px;color:#8a96a6;font-weight:700;letter-spacing:1px;">INFORMATION FLOW \u25b8</span>
-        <span style="font-size:9px;color:#556;">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
-        <span style="font-size:9px;">{order_html}</span>
-        <span style="font-size:9px;color:#556;">Pending <b style="color:hsl(35,75%,45%);">{state['pending']:.0f}</b></span>
         <span style="font-size:9px;color:#556;">Backlog <b style="color:hsl(0,55%,50%);">{state['backlog']:.0f}</b></span>
+        <span style="font-size:9px;color:#556;">Pending <b style="color:hsl(35,75%,45%);">{state['pending']:.0f}</b></span>
+        <span style="font-size:9px;">{order_html}</span>
+        <span style="font-size:9px;color:#556;">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
+        <span style="font-size:8px;color:#8a96a6;font-weight:700;letter-spacing:1px;">\u25c2 INFORMATION FLOW</span>
     </div>'''
 
     flow = f'''<div style="display:flex;align-items:center;justify-content:space-between;gap:3px;
-        padding:10px 8px;background:linear-gradient(90deg,hsl(215,18%,97%),hsl(145,10%,97%));
+        padding:10px 8px;background:linear-gradient(90deg,hsl(145,10%,97%),hsl(215,18%,97%));
         border:1px solid hsl(215,18%,90%);border-radius:10px;">
-        {stage_card("STORE", state['store_stock'], H_S, "\U0001f6cd\ufe0f", f"Dem {state['demand']:.0f}/wk", store_alert)}
-        {arr}
-        {pipe_html(state['dist_pipe'], H_DI, f"Distrib. {params['dist_lt']}wk")}
-        {arr}
-        {stage_card("CW", state['cw_stock'], H_CW, "\U0001f3ec", "Flow-thru")}
-        {arr}
-        {pipe_html(state['fp_pipe'], H_FP, f"Finish {params['fp_lt']}wk")}
-        {arr}
-        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk")}
-        {arr}
-        {pipe_html(state['semi_pipe'], H_SE, f"Semi {params['semi_lt']}wk")}
-        {arr}
-        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6")}
+        {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
         {arr}
         {pipe_html(state['mat_pipe'], H_RM, f"Material {params['mat_lt']}wk")}
         {arr}
-        {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
+        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6")}
+        {arr}
+        {pipe_html(state['semi_pipe'], H_SE, f"Semi {params['semi_lt']}wk")}
+        {arr}
+        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk")}
+        {arr}
+        {pipe_html(state['fp_pipe'], H_FP, f"Finish {params['fp_lt']}wk")}
+        {arr}
+        {stage_card("CW", state['cw_stock'], H_CW, "\U0001f3ec", "Flow-thru")}
+        {arr}
+        {pipe_html(state['dist_pipe'], H_DI, f"Distrib. {params['dist_lt']}wk")}
+        {arr}
+        {stage_card("STORE", state['store_stock'], H_S, "\U0001f6cd\ufe0f", f"Dem {state['demand']:.0f}/wk", store_alert)}
     </div>'''
 
-    flow_label = '<div style="text-align:center;margin:3px 0;"><span style="font-size:7px;color:#a0aab4;font-weight:700;letter-spacing:2px;">\u25c2\u25c2\u25c2 PHYSICAL FLOW (GOODS) \u25c2\u25c2\u25c2</span></div>'
+    flow_label = '<div style="text-align:center;margin:3px 0;"><span style="font-size:7px;color:#a0aab4;font-weight:700;letter-spacing:2px;">\u25b8\u25b8\u25b8 PHYSICAL FLOW (GOODS) \u25b8\u25b8\u25b8</span></div>'
 
     comment = f'''<div style="padding:6px 12px;background:hsl(215,12%,96%);border:1px solid hsl(215,12%,91%);
         border-radius:7px;font-size:10px;color:#3a4a5e;line-height:1.5;">{state['comment']}</div>'''
@@ -474,12 +474,14 @@ with st.expander("\U0001f4cb Full Simulation Summary", expanded=False):
 
 with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
     table_data = [{
-        'Week': s['week'], 'Demand': s['demand'], 'Sales': s['sales'],
-        'Missed': s['missed'], 'Store': s['store_stock'], 'Order': s['order'],
-        'Pending': s['pending'], 'Ship': s['supplier_shipped'],
-        'Mat In': s['mat_arr'], 'Semi': s['semi_input'], 'FP': s['fp_input'],
+        'Week': s['week'], 'Demand': s['demand'], 'Forecast': s['forecast'],
+        'Sales': s['sales'], 'Missed': s['missed'], 'Store Stock': s['store_stock'],
+        'Order': s['order'], 'Pending': s['pending'],
+        'Suppl Ship': s['supplier_shipped'], 'Mat Arrived': s['mat_arr'],
+        'Semi Input': s['semi_input'], 'FP Input': s['fp_input'],
+        'Comment': s['comment'],
     } for s in states]
-    st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=400)
+    st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
 
 with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
     scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{init_store}store")
