@@ -43,6 +43,3 @@ streamlit run app.py
 - **Capacity**: Each production stage starts at 100 pcs/wk, ramps up max +20%/wk when running at capacity
 - **Flow conservation**: Every unit is tracked — demand = sales + missed sales (verified)
 
-## License
-
-MIT
