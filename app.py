@@ -1,5 +1,6 @@
 import streamlit as st
 import json, math
+from datetime import datetime
 
 st.set_page_config(layout="wide", page_title="Supply Chain Agility Simulator", page_icon="🏭")
 
@@ -481,7 +482,8 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
 
 with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
-    scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{init_store}store")
+    now_str = datetime.now().strftime("%H:%M")
+    scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{init_store}st_{now_str}")
     if st.button("Save Current Scenario"):
         if 'saved_scenarios' not in st.session_state:
             st.session_state.saved_scenarios = {}
@@ -491,15 +493,25 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
     
     if 'saved_scenarios' in st.session_state and len(st.session_state.saved_scenarios) > 0:
         st.markdown("### Comparison")
-        comp = [{
-            'Scenario': n, 'Freq': f"{d['params']['order_freq']}wk",
-            'Stock': d['params']['init_store'],
-            'Svc%': f"{d['kpis']['svc_level']*100:.1f}%",
-            'Sales': f"{d['kpis']['total_sales']:,.0f}",
-            'Missed': f"{d['kpis']['total_missed']:,.0f}",
-            'Revenue': f"\u20ac{d['kpis']['revenue']:,.0f}",
-            'Margin': f"\u20ac{d['kpis']['margin']:,.0f}",
-        } for n, d in st.session_state.saved_scenarios.items()]
+        saved_list = list(st.session_state.saved_scenarios.items())
+        first_margin = saved_list[0][1]['kpis']['margin']
+        comp = []
+        for i, (n, d) in enumerate(saved_list):
+            k = d['kpis']; p = d['params']
+            delta = k['margin'] - first_margin
+            delta_str = f"\u20ac{delta:+,.0f}" if i > 0 else "Baseline"
+            comp.append({
+                'Scenario': n,
+                'Freq': f"{p['order_freq']}wk",
+                'Stock': p['init_store'],
+                'Svc%': f"{k['svc_level']*100:.1f}%",
+                'Sales': f"{k['total_sales']:,.0f}",
+                'Missed': f"{k['total_missed']:,.0f}",
+                'Revenue': f"\u20ac{k['revenue']:,.0f}",
+                'Margin': f"\u20ac{k['margin']:,.0f}",
+                'Margin %': f"{k['margin_pct']*100:.1f}%",
+                '\u0394 vs Baseline': delta_str,
+            })
         st.dataframe(pd.DataFrame(comp), use_container_width=True)
         if st.button("Clear All"):
             st.session_state.saved_scenarios = {}
