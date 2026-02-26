@@ -261,7 +261,7 @@ def make_sc_html(state, params):
 # ════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("## \u2699\ufe0f Supply Chain Setup")
-    weeks = st.select_slider("Simulation Length", options=list(range(12, 53, 4)), value=28)
+    weeks = st.select_slider("Simulation Length", options=list(range(12, 53, 2)), value=28)
     
     st.markdown("### \U0001f4e6 Initial Stock")
     init_store = st.slider("Store", 0, 3000, 1500, 50)
@@ -369,9 +369,9 @@ with k1:
     c = "#c0392b" if svc < 0.6 else ("#d4850a" if svc < 0.85 else "#1a8a4a")
     st.markdown(kpi_card("Service Level", f"{svc*100:.1f}%", c), unsafe_allow_html=True)
 with k2:
-    st.markdown(kpi_card("Cumul. Sales", f"{cum['sales']:,.0f}", "#2c5f8a"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Cumul. Sales", f"{round(cum['sales'], -1):,.0f}", "#2c5f8a"), unsafe_allow_html=True)
 with k3:
-    st.markdown(kpi_card("Cumul. Missed", f"{cum['missed']:,.0f}", "#c0392b"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Cumul. Missed", f"{round(cum['missed'], -1):,.0f}", "#c0392b"), unsafe_allow_html=True)
 with k4:
     st.markdown(kpi_card("Revenue", f"\u20ac{cum['revenue']:,.0f}", "#1a6b3c"), unsafe_allow_html=True)
 with k5:
@@ -454,11 +454,12 @@ with ch2:
 # ════════════════════════════════════════════════════════════════
 with st.expander("\U0001f4cb Full Simulation Summary", expanded=False):
     fk = final_kpis
+    def r10(v): return round(v, -1)
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.metric("Total Demand", f"{fk['total_demand']:,.0f}")
-        st.metric("Total Sales", f"{fk['total_sales']:,.0f}")
-        st.metric("Total Missed", f"{fk['total_missed']:,.0f}")
+        st.metric("Total Demand", f"{r10(fk['total_demand']):,.0f}")
+        st.metric("Total Sales", f"{r10(fk['total_sales']):,.0f}")
+        st.metric("Total Missed", f"{r10(fk['total_missed']):,.0f}")
         st.metric("Service Level", f"{fk['svc_level']*100:.1f}%")
     with c2:
         st.metric("Revenue", f"\u20ac{fk['revenue']:,.0f}")
@@ -503,8 +504,8 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
             comp.append({
                 'Scenario': n,
                 'Svc%': f"{k['svc_level']*100:.1f}%",
-                'Sales': f"{k['total_sales']:,.0f}",
-                'Missed': f"{k['total_missed']:,.0f}",
+                'Sales': f"{round(k['total_sales'], -1):,.0f}",
+                'Missed': f"{round(k['total_missed'], -1):,.0f}",
                 'Revenue': f"\u20ac{k['revenue']:,.0f}",
                 'Margin': f"\u20ac{k['margin']:,.0f}",
                 'Margin %': f"{k['margin_pct']*100:.1f}%",
