@@ -257,44 +257,44 @@ def make_sc_html(state, params):
         rpipe = list(reversed(pipe))
         def box(i):
             sty, txt = pipe_box_style(rpipe[i], hue)
-            return f'<div style="width:28px;height:28px;{sty}border:1px solid hsl({hue},20%,80%);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;">{txt}</div>'
+            return f'<div style="width:38px;height:38px;{sty}border:1px solid hsl({hue},20%,80%);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">{txt}</div>'
         inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
-        return f'<div style="text-align:center;flex:0 1 auto;min-width:32px;"><div style="font-size:7px;color:#8a96a6;margin-bottom:2px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
+        return f'<div style="text-align:center;flex:1 1 auto;"><div style="font-size:8px;color:#8a96a6;margin-bottom:3px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
 
     def stage_card(title, stock, hue, icon, sub="", alert=""):
         is_alert = alert != ""
         bdr = "hsl(0,55%,60%)" if is_alert else f"hsl({hue},30%,75%)"
         bg = "linear-gradient(180deg,hsl(0,70%,97%),hsl(0,50%,94%))" if is_alert else f"linear-gradient(180deg,hsl({hue},20%,99%),hsl({hue},25%,95%))"
-        return f'''<div style="background:{bg};border:2px solid {bdr};border-radius:10px;
-            padding:7px 8px;min-width:72px;text-align:center;flex:0 0 auto;">
-            <div style="font-size:15px;line-height:1;">{icon}</div>
-            <div style="font-size:7px;font-weight:700;color:hsl({hue},35%,42%);text-transform:uppercase;letter-spacing:0.8px;margin:2px 0;">{title}</div>
-            <div style="font-size:19px;font-weight:800;color:hsl({hue},40%,28%);">{stock:.0f}</div>
-            {'<div style="font-size:7px;color:#7a8a9e;margin-top:1px;">'+sub+'</div>' if sub else ''}
-            {'<div style="font-size:8px;color:hsl(0,60%,45%);font-weight:700;margin-top:1px;">'+alert+'</div>' if alert else ''}
+        return f'''<div style="background:{bg};border:2px solid {bdr};border-radius:12px;
+            padding:10px 12px;min-width:90px;text-align:center;flex:0 0 auto;">
+            <div style="font-size:20px;line-height:1;">{icon}</div>
+            <div style="font-size:8px;font-weight:700;color:hsl({hue},35%,42%);text-transform:uppercase;letter-spacing:0.8px;margin:3px 0;">{title}</div>
+            <div style="font-size:24px;font-weight:800;color:hsl({hue},40%,28%);">{stock:.0f}</div>
+            {'<div style="font-size:8px;color:#7a8a9e;margin-top:2px;">'+sub+'</div>' if sub else ''}
+            {'<div style="font-size:9px;color:hsl(0,60%,45%);font-weight:700;margin-top:2px;">'+alert+'</div>' if alert else ''}
         </div>'''
 
-    arr = '<div style="color:#b0bac6;font-size:14px;display:flex;align-items:center;flex:0 0 auto;">\u25b8</div>'
+    arr = '<div style="color:#b0bac6;font-size:20px;display:flex;align-items:center;flex:0 0 auto;padding:0 2px;">\u25b8</div>'
 
     H_S = 215; H_SA = 210; H_SB = 270; H_DI = 255; H_CW = 42; H_FP = 38; H_SE = 24; H_RM = 18; H_SU = 145
 
     alert_a = f"LOST {state['missed_a']:.0f}" if state['missed_a'] > 0.5 else ""
     alert_b = f"LOST {state['missed_b']:.0f}" if state['missed_b'] > 0.5 else ""
-    order_html = f"<b style='color:hsl(145,55%,35%);'>ORDER {state['order']:.0f}</b>" if state['order'] > 0 else "<span style='color:#b0b8c4;'>No order</span>"
+    order_html = f"<b style='color:hsl(145,55%,35%);font-size:13px;'>ORDER {state['order']:.0f}</b>" if state['order'] > 0 else "<span style='color:#b0b8c4;'>No order</span>"
 
-    info_bar = f'''<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 12px;
+    info_bar = f'''<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;
         background:linear-gradient(90deg,hsl(145,15%,97%),hsl(215,25%,96%));
-        border:1px solid hsl(215,20%,89%);border-radius:7px;margin-bottom:6px;">
-        <span style="font-size:9px;color:#556;">Backlog <b style="color:hsl(0,55%,50%);">{state['backlog']:.0f}</b></span>
-        <span style="font-size:9px;color:#556;">Pending <b style="color:hsl(35,75%,45%);">{state['pending']:.0f}</b></span>
-        <span style="font-size:9px;">{order_html}</span>
-        <span style="font-size:9px;color:#556;">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
-        <span style="font-size:9px;color:#556;">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}% | {'Smart' if params['smart_distrib'] else 'Push 50/50'}</span>
-        <span style="font-size:8px;color:#8a96a6;font-weight:700;letter-spacing:1px;">\u25c2 INFORMATION FLOW</span>
+        border:1px solid hsl(215,20%,89%);border-radius:8px;margin-bottom:8px;">
+        <span style="font-size:11px;color:#556;">Backlog <b style="color:hsl(0,55%,50%);">{state['backlog']:.0f}</b></span>
+        <span style="font-size:11px;color:#556;">Pending <b style="color:hsl(35,75%,45%);">{state['pending']:.0f}</b></span>
+        <span style="font-size:11px;">{order_html}</span>
+        <span style="font-size:11px;color:#556;">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
+        <span style="font-size:11px;color:#556;">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}% | {'Smart' if params['smart_distrib'] else 'Push 50/50'}</span>
+        <span style="font-size:9px;color:#8a96a6;font-weight:700;letter-spacing:1px;">\u25c2 INFORMATION FLOW</span>
     </div>'''
 
-    # Main upstream flow (Supplier → CW)
-    upstream = f'''<div style="display:flex;align-items:center;gap:3px;">
+    # Main upstream flow (Supplier → Central Warehouse)
+    upstream = f'''<div style="display:flex;align-items:center;gap:4px;flex:1 1 auto;">
         {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
         {arr}
         {pipe_html(state['mat_pipe'], H_RM, f"Material {params['mat_lt']}wk")}
@@ -311,40 +311,40 @@ def make_sc_html(state, params):
     </div>'''
 
     # Fork: CW → Dist A → Store A  /  CW → Dist B → Store B
-    branch_a = f'''<div style="display:flex;align-items:center;gap:3px;">
+    branch_a = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr}
         {pipe_html(state['dist_pipe_a'], H_SA, f"Dist A {params['dist_lt']}wk")}
         {arr}
         {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a)}
     </div>'''
 
-    branch_b = f'''<div style="display:flex;align-items:center;gap:3px;">
+    branch_b = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr}
         {pipe_html(state['dist_pipe_b'], H_SB, f"Dist B {params['dist_lt']}wk")}
         {arr}
         {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b)}
     </div>'''
 
-    # Layout: upstream on left, fork on right
-    flow = f'''<div style="display:flex;align-items:center;gap:0px;padding:8px 6px;
+    # Layout: upstream stretches, fork on right
+    flow = f'''<div style="display:flex;align-items:center;gap:0px;padding:12px 10px;width:100%;box-sizing:border-box;
         background:linear-gradient(90deg,hsl(145,10%,97%),hsl(215,18%,97%));
-        border:1px solid hsl(215,18%,90%);border-radius:10px;">
+        border:1px solid hsl(215,18%,90%);border-radius:12px;">
         {upstream}
-        <div style="display:flex;flex-direction:column;gap:4px;margin-left:0px;">
+        <div style="display:flex;flex-direction:column;gap:6px;flex:0 0 auto;">
             {branch_a}
             {branch_b}
         </div>
     </div>'''
 
-    flow_label = '<div style="text-align:center;margin:3px 0;"><span style="font-size:7px;color:#a0aab4;font-weight:700;letter-spacing:2px;">\u25b8\u25b8\u25b8 PHYSICAL FLOW (GOODS) \u25b8\u25b8\u25b8</span></div>'
+    flow_label = '<div style="text-align:center;margin:4px 0;"><span style="font-size:9px;color:#a0aab4;font-weight:700;letter-spacing:2px;">\u25b8\u25b8\u25b8 PHYSICAL FLOW (GOODS) \u25b8\u25b8\u25b8</span></div>'
 
-    comment = f'''<div style="padding:6px 12px;background:hsl(215,12%,96%);border:1px solid hsl(215,12%,91%);
-        border-radius:7px;font-size:10px;color:#3a4a5e;line-height:1.5;">{state['comment']}</div>'''
+    comment = f'''<div style="padding:8px 16px;background:hsl(215,12%,96%);border:1px solid hsl(215,12%,91%);
+        border-radius:8px;font-size:12px;color:#3a4a5e;line-height:1.6;">{state['comment']}</div>'''
 
     return f'''<!DOCTYPE html><html><head>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        body {{ margin:0; padding:8px 10px; background:#f4f6f9; font-family:'Inter',system-ui,sans-serif; color:#1a2030; }}
+        body {{ margin:0; padding:10px 14px; background:#f4f6f9; font-family:'Inter',system-ui,sans-serif; color:#1a2030; }}
     </style></head><body>{info_bar}{flow}{flow_label}{comment}</body></html>'''
 
 
@@ -490,7 +490,7 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-st.components.v1.html(make_sc_html(state, params), height=365, scrolling=False)
+st.components.v1.html(make_sc_html(state, params), height=440, scrolling=False)
 
 
 # ════════════════════════════════════════════════════════════════
