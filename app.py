@@ -22,12 +22,12 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         if w < ramp_start:
             demand[w] = base_forecast
         elif ramp_start == ramp_end:
-            demand[w] = base_forecast * demand_mult
+            demand[w] = round(base_forecast * demand_mult)
         elif w <= ramp_end:
             p = (w - ramp_start) / (ramp_end - ramp_start)
-            demand[w] = base_forecast + (base_forecast * demand_mult - base_forecast) * p
+            demand[w] = round(base_forecast + (base_forecast * demand_mult - base_forecast) * p)
         else:
-            demand[w] = base_forecast * demand_mult
+            demand[w] = round(base_forecast * demand_mult)
     
     # Pipelines (FIFO: index 0 exits next, index -1 just entered)
     mat_pipe = [0.0] * max(1, mat_lt)
@@ -79,10 +79,11 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         # 3. Supplier ships from existing backlog
         if pb > 0.01:
             if not ps: ps = True; pc = float(cap_start)
-            else: pc *= (1 + cap_ramp)
-            shipped = min(pb, pc); pb -= shipped
+            else: pc = min(pc * (1 + cap_ramp), cap_start * 10)  # cap max 10x
+            shipped = math.ceil(min(pb, pc)); pb -= shipped
         else:
             shipped = 0.0
+            ps = False; pc = float(cap_start)  # reset when idle
         s['supplier_shipped'] = round(shipped, 1)
         s['supplier_cap'] = round(pc, 0)
         
@@ -99,10 +100,11 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         # 7. Semi input (raw mat → semi pipe, capacity limited)
         if raw_mat > 0.01:
             if not ss_: ss_ = True; sc_ = float(cap_start)
-            else: sc_ *= (1 + cap_ramp)
-            si = min(raw_mat, sc_); raw_mat -= si
+            else: sc_ = min(sc_ * (1 + cap_ramp), cap_start * 10)
+            si = math.ceil(min(raw_mat, sc_)); raw_mat -= si
         else:
             si = 0.0
+            ss_ = False; sc_ = float(cap_start)  # reset when idle
         s['semi_input'] = round(si, 1)
         s['semi_cap'] = round(sc_, 0)
         s['raw_mat_stock'] = round(raw_mat, 1)
@@ -110,16 +112,17 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         # 8. FP input (semi → fp pipe, capacity limited)
         if semi > 0.01:
             if not fps: fps = True; fpc = float(cap_start)
-            else: fpc *= (1 + cap_ramp)
-            fi = min(semi, fpc); semi -= fi
+            else: fpc = min(fpc * (1 + cap_ramp), cap_start * 10)
+            fi = math.ceil(min(semi, fpc)); semi -= fi
         else:
             fi = 0.0
+            fps = False; fpc = float(cap_start)  # reset when idle
         s['fp_input'] = round(fi, 1)
         s['fp_cap'] = round(fpc, 0)
         s['semi_stock'] = round(semi, 1)
         
         # 9. CW ships everything → dist pipe
-        ship_out = cw; cw = 0.0
+        ship_out = math.ceil(cw); cw = 0.0
         s['cw_shipped'] = round(ship_out, 1)
         s['cw_stock'] = 0.0
         
@@ -138,7 +141,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         if w in ow:
             pnd = co - cas
             tgt = ff * coverage
-            od = max(0, tgt - store - pnd)
+            od = math.ceil(max(0, tgt - store - pnd))
             co += od; pb += od
             s['order'] = round(od, 0)
         else:
@@ -203,7 +206,7 @@ def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, tot
     rev = ts * price
     vc = tfp * var_cost
     gm = rev - vc
-    fx = base_forecast * 52 * price * fixed_pct * (total_weeks / 52)
+    fx = base_forecast * 52 * price * fixed_pct * (week / 52)
     mg = gm - fx
     return {'sales': ts, 'missed': tm, 'demand': td, 'revenue': rev,
             'svc_level': ts / td if td > 0 else 0, 'margin': mg,
@@ -242,10 +245,10 @@ def make_sc_html(state, params):
             half = math.ceil(n / 2)
             top_boxes = "".join(f'''<div style="width:32px;height:32px;background:rgba({color},{min(1.0, 0.15 + (pipe[i] / max(1, params["cap_start"] * 3)) * 0.85) if pipe[i] > 0.5 else 0.08});
                 border:1px solid rgba({color},0.4);border-radius:3px;display:flex;align-items:center;
-                justify-content:center;font-size:9px;color:#e0e0e0;font-weight:600;margin:1px;">{pipe[i]:.0f if pipe[i] > 0.5 else ""}</div>''' for i in range(half))
+                justify-content:center;font-size:9px;color:#e0e0e0;font-weight:600;margin:1px;">{f"{pipe[i]:.0f}" if pipe[i] > 0.5 else ""}</div>''' for i in range(half))
             bot_boxes = "".join(f'''<div style="width:32px;height:32px;background:rgba({color},{min(1.0, 0.15 + (pipe[i] / max(1, params["cap_start"] * 3)) * 0.85) if pipe[i] > 0.5 else 0.08});
                 border:1px solid rgba({color},0.4);border-radius:3px;display:flex;align-items:center;
-                justify-content:center;font-size:9px;color:#e0e0e0;font-weight:600;margin:1px;">{pipe[i]:.0f if pipe[i] > 0.5 else ""}</div>''' for i in range(half, n))
+                justify-content:center;font-size:9px;color:#e0e0e0;font-weight:600;margin:1px;">{f"{pipe[i]:.0f}" if pipe[i] > 0.5 else ""}</div>''' for i in range(half, n))
             return f'''<div style="text-align:center;">
                 <div style="font-size:8px;color:#888;margin-bottom:2px;">{lt_label}</div>
                 <div style="display:flex;gap:0px;justify-content:center;">{top_boxes}</div>
