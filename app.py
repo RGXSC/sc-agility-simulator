@@ -482,7 +482,7 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
 
 with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
-    now_str = datetime.now().strftime("%H:%M")
+    now_str = datetime.now().strftime("%H:%M:%S")
     scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{init_store}st_{now_str}")
     if st.button("Save Current Scenario"):
         if 'saved_scenarios' not in st.session_state:
@@ -502,8 +502,6 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
             delta_str = f"\u20ac{delta:+,.0f}" if i > 0 else "Baseline"
             comp.append({
                 'Scenario': n,
-                'Freq': f"{p['order_freq']}wk",
-                'Stock': p['init_store'],
                 'Svc%': f"{k['svc_level']*100:.1f}%",
                 'Sales': f"{k['total_sales']:,.0f}",
                 'Missed': f"{k['total_missed']:,.0f}",
@@ -511,6 +509,24 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
                 'Margin': f"\u20ac{k['margin']:,.0f}",
                 'Margin %': f"{k['margin_pct']*100:.1f}%",
                 '\u0394 vs Baseline': delta_str,
+                'Store Init': p['init_store'],
+                'CW Init': p['init_cw'],
+                'Semi Init': p['init_semi'],
+                'RawMat Init': p['init_rawmat'],
+                'Order Freq': f"{p['order_freq']}wk",
+                'Mat LT': p['mat_lt'],
+                'Semi LT': p['semi_lt'],
+                'FP LT': p['fp_lt'],
+                'Dist LT': p['dist_lt'],
+                'Base Fcst': p['base_forecast'],
+                'Dem Mult': f"{p['demand_mult']}x",
+                'Ramp': f"W{p['ramp_start']}-W{p['ramp_end']}",
+                'Cap Start': p['cap_start'],
+                'Cap Ramp%': f"{p['cap_ramp']*100:.0f}%",
+                'Price': f"\u20ac{p['price']}",
+                'Var Cost': f"\u20ac{p['var_cost']}",
+                'Fixed%': f"{p['fixed_pct']*100:.0f}%",
+                'Weeks': p['weeks'],
             })
         st.dataframe(pd.DataFrame(comp), use_container_width=True)
         if st.button("Clear All"):
