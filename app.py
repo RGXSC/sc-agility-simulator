@@ -12,7 +12,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
                    order_freq, mat_lt, semi_lt, fp_lt, dist_lt,
                    cap_start, cap_ramp, base_forecast,
                    demand_mult, ramp_start, ramp_end,
-                   price, var_cost, fixed_pct, store_a_pct):
+                   price, var_cost, fixed_pct, store_a_pct, smart_distrib):
 
     phys_lt = mat_lt + semi_lt + fp_lt + dist_lt
     coverage = phys_lt + order_freq
@@ -137,19 +137,24 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['cw_shipped'] = round(ship_out, 1); s['cw_stock'] = 0.0
 
         # Net need = (forecast_store × dist_lt) - current_store_stock
-        # Proportional allocation based on relative need
-        need_a = max(0, dem_a * dist_lt - store_a)
-        need_b = max(0, dem_b * dist_lt - store_b)
-        total_need = need_a + need_b
-        if total_need > 0.01 and ship_out > 0:
-            alloc_a = round(ship_out * (need_a / total_need))
-            alloc_b = ship_out - alloc_a  # ensure no rounding loss
-        elif ship_out > 0:
-            # Both stores well stocked — fall back to demand proportional
-            alloc_a = round(ship_out * pct_a)
-            alloc_b = ship_out - alloc_a
+        # Smart: proportional allocation based on relative need
+        # Dumb (push): always 50/50 regardless of actual need
+        if smart_distrib:
+            need_a = max(0, dem_a * dist_lt - store_a)
+            need_b = max(0, dem_b * dist_lt - store_b)
+            total_need = need_a + need_b
+            if total_need > 0.01 and ship_out > 0:
+                alloc_a = round(ship_out * (need_a / total_need))
+                alloc_b = ship_out - alloc_a
+            elif ship_out > 0:
+                alloc_a = round(ship_out * pct_a)
+                alloc_b = ship_out - alloc_a
+            else:
+                alloc_a = 0; alloc_b = 0
         else:
-            alloc_a = 0; alloc_b = 0
+            # Push model: 50/50 split regardless of demand
+            alloc_a = round(ship_out * 0.5)
+            alloc_b = ship_out - alloc_a
         s['alloc_a'] = round(alloc_a, 1); s['alloc_b'] = round(alloc_b, 1)
 
         # 9. Update pipes
@@ -192,7 +197,8 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         if shipped > 0.5:
             parts.append(f"\U0001f69a Supplier {shipped:.0f} (cap {pc:.0f}).")
         if ship_out > 0.5:
-            parts.append(f"\U0001f4e6 CW\u2192A:{alloc_a:.0f} B:{alloc_b:.0f} (need A:{need_a:.0f} B:{need_b:.0f}).")
+            mode = "smart" if smart_distrib else "push 50/50"
+            parts.append(f"\U0001f4e6 CW\u2192A:{alloc_a:.0f} B:{alloc_b:.0f} ({mode}).")
         s['comment'] = " ".join(parts)
         states.append(s)
 
@@ -283,7 +289,7 @@ def make_sc_html(state, params):
         <span style="font-size:9px;color:#556;">Pending <b style="color:hsl(35,75%,45%);">{state['pending']:.0f}</b></span>
         <span style="font-size:9px;">{order_html}</span>
         <span style="font-size:9px;color:#556;">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
-        <span style="font-size:9px;color:#556;">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}%</span>
+        <span style="font-size:9px;color:#556;">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}% | {'Smart' if params['smart_distrib'] else 'Push 50/50'}</span>
         <span style="font-size:8px;color:#8a96a6;font-weight:700;letter-spacing:1px;">\u25c2 INFORMATION FLOW</span>
     </div>'''
 
@@ -359,7 +365,11 @@ with st.sidebar:
 
     st.markdown("### \U0001f3ea Store Demand Split")
     store_a_pct = st.slider("Store A demand (%)", 0, 100, 50, 5)
-    st.caption(f"Store A: **{store_a_pct}%** | Store B: **{100 - store_a_pct}%** of total demand")
+    smart_distrib = st.toggle("Smart Distribution (need-based)", value=False)
+    if smart_distrib:
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — CW allocates by net need")
+    else:
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — CW allocates 50/50 (push)")
 
     st.markdown("### \U0001f517 Lead Times (weeks)")
     c1, c2 = st.columns(2)
@@ -404,6 +414,7 @@ params = {
     'demand_mult': demand_mult, 'ramp_start': ramp_start,
     'ramp_end': ramp_end, 'price': price, 'var_cost': var_cost,
     'fixed_pct': fixed_pct, 'store_a_pct': store_a_pct,
+    'smart_distrib': smart_distrib,
 }
 
 
@@ -440,7 +451,8 @@ st.markdown("""
 # HEADER + WEEK SELECTOR
 # ════════════════════════════════════════════════════════════════
 st.markdown("# \U0001f3ed Supply Chain Agility Simulator")
-st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{coverage}**wk \u00b7 Store A: **{store_a_pct}%** / B: **{100-store_a_pct}%** \u00b7 Init stock 50/50*")
+distrib_mode = "Smart" if smart_distrib else "Push 50/50"
+st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{coverage}**wk \u00b7 Store A: **{store_a_pct}%** / B: **{100-store_a_pct}%** \u00b7 Init stock 50/50 \u00b7 Distrib: **{distrib_mode}***")
 
 week = st.slider("\U0001f4c5 Week", 1, weeks, 1, key="week_slider")
 state = states[week - 1]
@@ -584,7 +596,7 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
 
 with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
     now_str = datetime.now().strftime("%H:%M:%S")
-    scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{init_store}st_A{store_a_pct}_{now_str}")
+    scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{init_store}st_A{store_a_pct}_{'smart' if smart_distrib else 'push'}_{now_str}")
     if st.button("Save Current Scenario"):
         if 'saved_scenarios' not in st.session_state:
             st.session_state.saved_scenarios = {}
@@ -613,6 +625,7 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
                 'Margin %': f"{k['margin_pct']*100:.1f}%",
                 '\u0394 vs Base': delta_str,
                 'StoreA%': f"{p['store_a_pct']}%",
+                'Distrib': 'Smart' if p.get('smart_distrib', False) else 'Push',
                 'Store Init': p['init_store'],
                 'CW': p['init_cw'], 'Semi': p['init_semi'], 'RM': p['init_rawmat'],
                 'Freq': f"{p['order_freq']}wk",
