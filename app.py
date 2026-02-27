@@ -204,12 +204,14 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
 
     return states
 
-def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks):
+def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks, init_stock_total=0):
     ts = sum(s['sales'] for s in states)
     tm = sum(s['missed'] for s in states)
     td = sum(s['demand'] for s in states)
     tfp = sum(s['fp_input'] for s in states)
-    rev = ts * price; vc = tfp * var_cost; gm = rev - vc
+    # Var cost = production DURING sim + initial stock (already bought/produced before sim)
+    total_units_costed = tfp + init_stock_total
+    rev = ts * price; vc = total_units_costed * var_cost; gm = rev - vc
     fx = base_forecast * 52 * price * fixed_pct * (weeks / 52)
     mg = gm - fx
     return {
@@ -218,7 +220,8 @@ def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks):
         'stockout_weeks': sum(1 for s in states if s['missed'] > 0.5),
         'revenue': rev, 'var_cost': vc, 'gm': gm, 'fixed': fx,
         'margin': mg, 'margin_pct': mg / rev if rev > 0 else 0,
-        'produced': tfp, 'store_end': states[-1]['store_stock'],
+        'produced': tfp, 'init_stock_cost': init_stock_total * var_cost,
+        'store_end': states[-1]['store_stock'],
         'lost_rev': tm * price,
         'missed_a': sum(s['missed_a'] for s in states),
         'missed_b': sum(s['missed_b'] for s in states),
@@ -226,11 +229,12 @@ def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks):
         'sales_b': sum(s['sales_b'] for s in states),
     }
 
-def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, total_weeks):
+def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, total_weeks, init_stock_total=0):
     sub = states[:week]
     ts = sum(s['sales'] for s in sub); tm = sum(s['missed'] for s in sub)
     td = sum(s['demand'] for s in sub); tfp = sum(s['fp_input'] for s in sub)
-    rev = ts * price; vc = tfp * var_cost; gm = rev - vc
+    total_units_costed = tfp + init_stock_total
+    rev = ts * price; vc = total_units_costed * var_cost; gm = rev - vc
     fx = base_forecast * 52 * price * fixed_pct * (week / 52)
     mg = gm - fx
     return {'sales': ts, 'missed': tm, 'demand': td, 'revenue': rev,
@@ -422,7 +426,7 @@ params = {
 # RUN
 # ════════════════════════════════════════════════════════════════
 states = run_simulation(**params)
-final_kpis = compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks)
+final_kpis = compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks, total_init)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -456,7 +460,7 @@ st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{
 
 week = st.slider("\U0001f4c5 Week", 1, weeks, 1, key="week_slider")
 state = states[week - 1]
-cum = cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, weeks)
+cum = cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, weeks, total_init)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -574,6 +578,7 @@ with st.expander("\U0001f4cb Full Simulation Summary", expanded=False):
         st.metric("Revenue", f"\u20ac{fk['revenue']:,.0f}")
         st.metric("Gross Margin", f"\u20ac{fk['gm']:,.0f}")
         st.metric("Variable Costs", f"\u20ac{fk['var_cost']:,.0f}")
+        st.caption(f"incl. init stock: \u20ac{fk['init_stock_cost']:,.0f}")
     with c4:
         st.metric("Fixed Costs", f"\u20ac{fk['fixed']:,.0f}")
         st.metric("Net Margin", f"\u20ac{fk['margin']:,.0f}")
