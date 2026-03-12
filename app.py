@@ -1,5 +1,5 @@
 import streamlit as st
-import json, math, time as _time
+import json, math
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -558,15 +558,16 @@ demand_info = f"Avg {avg_dem:.0f}/wk, peak {peak_val} at W{peak_wk_idx}"
 st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{coverage}**wk \u00b7 Demand: **{demand_info}** \u00b7 Store A: **{store_a_pct}%** / B: **{100-store_a_pct}%** \u00b7 Distrib: **{distrib_mode}***")
 
 # ════════════════════════════════════════════════════════════════
-# PLAYBACK CONTROLS
+# WEEK NAVIGATION
 # ════════════════════════════════════════════════════════════════
+import time as _time
 
 if "week_num" not in st.session_state:
     st.session_state.week_num = 0
 if "play_mode" not in st.session_state:
     st.session_state.play_mode = None
 
-# Auto-advance BEFORE rendering (so slider picks up new value)
+# Auto-advance BEFORE rendering
 if st.session_state.play_mode is not None and st.session_state.week_num < weeks:
     delay = 3.0 if st.session_state.play_mode == "play" else 1.0
     _time.sleep(delay)
@@ -575,7 +576,6 @@ if st.session_state.play_mode is not None and st.session_state.week_num < weeks:
         st.session_state.play_mode = None
     st.rerun()
 
-# Transport buttons
 bc1, bc2, bc3, bc4, bc5, bc_info = st.columns([1, 1, 1, 1, 1, 3])
 with bc1:
     if st.button("⏮", help="Week 0", use_container_width=True):
@@ -598,14 +598,12 @@ with bc5:
         st.session_state.week_num = weeks; st.session_state.play_mode = None; st.rerun()
 with bc_info:
     mode_txt = {"play": "▶ Playing (3s)", "ff": "⏩ Fast (1s)"}.get(st.session_state.play_mode, "⏸ Paused")
-    st.markdown(f"<div style='padding:6px 0;font-size:13px;color:#5D6D7E;'>{mode_txt} — <b>Week {st.session_state.week_num}</b> / {weeks}</div>", unsafe_allow_html=True)
-
-# Slider — on_change syncs back to week_num and stops playback
-def _on_slider_change():
-    st.session_state.week_num = st.session_state._wk_sl
-    st.session_state.play_mode = None
-
-st.slider("📅 Week", 0, weeks, value=st.session_state.week_num, key="_wk_sl", on_change=_on_slider_change)
+    st.markdown(
+        f"<div style='text-align:center;padding:6px 0;font-size:18px;font-weight:700;color:#1a2a40;'>"
+        f"📅 Week {st.session_state.week_num} / {weeks}"
+        f"<span style='font-size:12px;color:#5D6D7E;font-weight:400;margin-left:12px;'>{mode_txt}</span></div>",
+        unsafe_allow_html=True,
+    )
 
 week = st.session_state.week_num
 state = states[week]
