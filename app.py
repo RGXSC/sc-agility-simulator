@@ -1,5 +1,5 @@
 import streamlit as st
-import json, math
+import json, math, time as _time
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -557,9 +557,53 @@ distrib_mode = "Smart" if smart_distrib else "Push 50/50"
 demand_info = f"Avg {avg_dem:.0f}/wk, peak {peak_val} at W{peak_wk_idx}"
 st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{coverage}**wk \u00b7 Demand: **{demand_info}** \u00b7 Store A: **{store_a_pct}%** / B: **{100-store_a_pct}%** \u00b7 Distrib: **{distrib_mode}***")
 
-week = st.slider("\U0001f4c5 Week", 0, weeks, 0, key="week_slider")
-state = states[week]  # index matches week number since week 0 is at index 0
+# ════════════════════════════════════════════════════════════════
+# PLAYBACK CONTROLS
+# ════════════════════════════════════════════════════════════════
+
+if "wk" not in st.session_state:
+    st.session_state.wk = 0
+if "play_mode" not in st.session_state:
+    st.session_state.play_mode = None  # None, "play", "ff"
+
+# Transport buttons
+bc1, bc2, bc3, bc4, bc5, bc_info = st.columns([1, 1, 1, 1, 1, 3])
+with bc1:
+    if st.button("⏮", help="Week 0", use_container_width=True):
+        st.session_state.wk = 0; st.session_state.play_mode = None; st.rerun()
+with bc2:
+    if st.button("◀", help="Back 1 week", use_container_width=True):
+        st.session_state.wk = max(0, st.session_state.wk - 1); st.session_state.play_mode = None; st.rerun()
+with bc3:
+    play_label = "⏸" if st.session_state.play_mode == "play" else "▶"
+    if st.button(play_label, help="Play / Pause (3s/wk)", use_container_width=True):
+        st.session_state.play_mode = None if st.session_state.play_mode == "play" else "play"
+        st.rerun()
+with bc4:
+    ff_label = "⏸" if st.session_state.play_mode == "ff" else "⏩"
+    if st.button(ff_label, help="Fast / Pause (1s/wk)", use_container_width=True):
+        st.session_state.play_mode = None if st.session_state.play_mode == "ff" else "ff"
+        st.rerun()
+with bc5:
+    if st.button("⏭", help="Last week", use_container_width=True):
+        st.session_state.wk = weeks; st.session_state.play_mode = None; st.rerun()
+with bc_info:
+    mode_txt = {"play": "▶ Playing (3s)", "ff": "⏩ Fast (1s)"}.get(st.session_state.play_mode, "⏸ Paused")
+    st.markdown(f"<div style='padding:6px 0;font-size:13px;color:#5D6D7E;'>{mode_txt} — <b>Week {st.session_state.wk}</b> / {weeks}</div>", unsafe_allow_html=True)
+
+# Week slider — on_change callback to stop playback
+def _on_slider_change():
+    st.session_state.wk = st.session_state._wk_slider
+    st.session_state.play_mode = None
+
+st.slider("📅 Week", 0, weeks, st.session_state.wk, key="_wk_slider", on_change=_on_slider_change)
+
+week = st.session_state.wk
+state = states[week]
 cum = cumulative_kpis(states[1:], week, price, var_cost, fixed_pct, base_forecast, weeks, total_init)
+
+# Flag for auto-advance at end of script
+_should_rerun = st.session_state.play_mode is not None and st.session_state.wk < weeks
 
 
 # ════════════════════════════════════════════════════════════════
@@ -609,25 +653,39 @@ dem_chart_data = pd.DataFrame({
     "Missed": [states[i]["missed"] for i in range(1, weeks + 1)],
 })
 
+# Shared Y scale based on max demand
+y_max = max(dem_chart_data["Demand"].max(), 1) * 1.1
+y_scale = alt.Scale(domain=[0, y_max])
+
 dem_bars = alt.Chart(dem_chart_data).mark_bar(
-    color="#4a90d9", opacity=0.6, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
+    color="#4a90d9", opacity=0.5, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
 ).encode(
     x=alt.X("Week:O", title="Week"),
-    y=alt.Y("Demand:Q", title="Units/week"),
+    y=alt.Y("Demand:Q", title="Units/week", scale=y_scale),
 )
-sales_line = alt.Chart(dem_chart_data).mark_line(
-    color="#1a8a4a", strokeWidth=2.5
-).encode(x="Week:O", y="Sales:Q")
-missed_area = alt.Chart(dem_chart_data).mark_area(
-    color="#c0392b", opacity=0.3
-).encode(x="Week:O", y="Missed:Q")
+sales_bars = alt.Chart(dem_chart_data).mark_bar(
+    color="#1a8a4a", opacity=0.8, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
+).encode(
+    x=alt.X("Week:O"),
+    y=alt.Y("Sales:Q", scale=y_scale),
+)
+missed_bars = alt.Chart(dem_chart_data).mark_bar(
+    color="#c0392b", opacity=0.7, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
+).encode(
+    x=alt.X("Week:O"),
+    y=alt.Y("Missed:Q", scale=y_scale),
+    y2=alt.Y2("Sales:Q"),  # stack missed on top of sales
+)
 
 rule_dc = alt.Chart(pd.DataFrame({"Week": [week]})).mark_rule(
     color="#d4850a", strokeWidth=2, strokeDash=[4, 2]
 ).encode(x="Week:O")
 
-st.altair_chart(dem_bars + sales_line + missed_area + rule_dc, use_container_width=True)
-st.caption("🔵 Demand | 🟢 Sales | 🔴 Missed | 🟠 Current week")
+st.altair_chart(
+    (dem_bars + sales_bars + missed_bars + rule_dc).properties(height=300),
+    use_container_width=True,
+)
+st.caption("🔵 Demand | 🟢 Sales | 🔴 Missed (stacked on sales) | 🟠 Current week")
 
 # ════════════════════════════════════════════════════════════════
 # CHARTS
@@ -776,3 +834,14 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
         if st.button("Clear All"):
             st.session_state.saved_scenarios = {}
             st.rerun()
+
+# ════════════════════════════════════════════════════════════════
+# PLAYBACK AUTO-ADVANCE
+# ════════════════════════════════════════════════════════════════
+if _should_rerun:
+    delay = 3.0 if st.session_state.play_mode == "play" else 1.0
+    _time.sleep(delay)
+    st.session_state.wk = min(st.session_state.wk + 1, weeks)
+    if st.session_state.wk >= weeks:
+        st.session_state.play_mode = None
+    st.rerun()
