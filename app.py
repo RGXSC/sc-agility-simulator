@@ -561,24 +561,30 @@ st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{
 # PLAYBACK CONTROLS
 # ════════════════════════════════════════════════════════════════
 
+if "week_num" not in st.session_state:
+    st.session_state.week_num = 0
 if "play_mode" not in st.session_state:
-    st.session_state.play_mode = None  # None, "play", "ff"
-if "_wk_slider" not in st.session_state:
-    st.session_state._wk_slider = 0
+    st.session_state.play_mode = None
 
-def _set_week(w):
-    st.session_state._wk_slider = max(0, min(w, weeks))
+# Auto-advance BEFORE rendering (so slider picks up new value)
+if st.session_state.play_mode is not None and st.session_state.week_num < weeks:
+    delay = 3.0 if st.session_state.play_mode == "play" else 1.0
+    _time.sleep(delay)
+    st.session_state.week_num = min(st.session_state.week_num + 1, weeks)
+    if st.session_state.week_num >= weeks:
+        st.session_state.play_mode = None
+    st.rerun()
 
 # Transport buttons
 bc1, bc2, bc3, bc4, bc5, bc_info = st.columns([1, 1, 1, 1, 1, 3])
 with bc1:
     if st.button("⏮", help="Week 0", use_container_width=True):
-        _set_week(0); st.session_state.play_mode = None; st.rerun()
+        st.session_state.week_num = 0; st.session_state.play_mode = None; st.rerun()
 with bc2:
-    if st.button("◀", help="Back 1 week", use_container_width=True):
-        _set_week(st.session_state._wk_slider - 1); st.session_state.play_mode = None; st.rerun()
+    if st.button("⏪", help="Back 1 week", use_container_width=True):
+        st.session_state.week_num = max(0, st.session_state.week_num - 1); st.session_state.play_mode = None; st.rerun()
 with bc3:
-    play_label = "⏸" if st.session_state.play_mode == "play" else "▶"
+    play_label = "⏸" if st.session_state.play_mode == "play" else "▶️"
     if st.button(play_label, help="Play / Pause (3s/wk)", use_container_width=True):
         st.session_state.play_mode = None if st.session_state.play_mode == "play" else "play"
         st.rerun()
@@ -589,23 +595,21 @@ with bc4:
         st.rerun()
 with bc5:
     if st.button("⏭", help="Last week", use_container_width=True):
-        _set_week(weeks); st.session_state.play_mode = None; st.rerun()
+        st.session_state.week_num = weeks; st.session_state.play_mode = None; st.rerun()
 with bc_info:
     mode_txt = {"play": "▶ Playing (3s)", "ff": "⏩ Fast (1s)"}.get(st.session_state.play_mode, "⏸ Paused")
-    st.markdown(f"<div style='padding:6px 0;font-size:13px;color:#5D6D7E;'>{mode_txt} — <b>Week {st.session_state._wk_slider}</b> / {weeks}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='padding:6px 0;font-size:13px;color:#5D6D7E;'>{mode_txt} — <b>Week {st.session_state.week_num}</b> / {weeks}</div>", unsafe_allow_html=True)
 
-# Slider — user drag stops playback via on_change
+# Slider — on_change syncs back to week_num and stops playback
 def _on_slider_change():
+    st.session_state.week_num = st.session_state._wk_sl
     st.session_state.play_mode = None
 
-st.slider("📅 Week", 0, weeks, key="_wk_slider", on_change=_on_slider_change)
+st.slider("📅 Week", 0, weeks, value=st.session_state.week_num, key="_wk_sl", on_change=_on_slider_change)
 
-week = st.session_state._wk_slider
+week = st.session_state.week_num
 state = states[week]
 cum = cumulative_kpis(states[1:], week, price, var_cost, fixed_pct, base_forecast, weeks, total_init)
-
-# Flag for auto-advance at end of script
-_should_rerun = st.session_state.play_mode is not None and week < weeks
 
 
 # ════════════════════════════════════════════════════════════════
@@ -836,14 +840,3 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
         if st.button("Clear All"):
             st.session_state.saved_scenarios = {}
             st.rerun()
-
-# ════════════════════════════════════════════════════════════════
-# PLAYBACK AUTO-ADVANCE
-# ════════════════════════════════════════════════════════════════
-if _should_rerun:
-    delay = 3.0 if st.session_state.play_mode == "play" else 1.0
-    _time.sleep(delay)
-    st.session_state._wk_slider = min(st.session_state._wk_slider + 1, weeks)
-    if st.session_state._wk_slider >= weeks:
-        st.session_state.play_mode = None
-    st.rerun()
