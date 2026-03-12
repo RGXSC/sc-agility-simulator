@@ -560,50 +560,25 @@ st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{
 # ════════════════════════════════════════════════════════════════
 # WEEK NAVIGATION
 # ════════════════════════════════════════════════════════════════
-import time as _time
 
 if "week_num" not in st.session_state:
     st.session_state.week_num = 0
-if "play_mode" not in st.session_state:
-    st.session_state.play_mode = None
 
-# Auto-advance BEFORE rendering
-if st.session_state.play_mode is not None and st.session_state.week_num < weeks:
-    delay = 3.0 if st.session_state.play_mode == "play" else 1.0
-    _time.sleep(delay)
-    st.session_state.week_num = min(st.session_state.week_num + 1, weeks)
-    if st.session_state.week_num >= weeks:
-        st.session_state.play_mode = None
-    st.rerun()
+def _sync_slider():
+    st.session_state.week_num = st.session_state._wksl
 
-bc1, bc2, bc3, bc4, bc5, bc_info = st.columns([1, 1, 1, 1, 1, 3])
+bc1, bc2, bc3 = st.columns([1, 6, 1])
 with bc1:
-    if st.button("⏮", help="Week 0", use_container_width=True):
-        st.session_state.week_num = 0; st.session_state.play_mode = None; st.rerun()
+    if st.button("◀", use_container_width=True):
+        st.session_state.week_num = max(0, st.session_state.week_num - 1)
+        st.rerun()
 with bc2:
-    if st.button("⏪", help="Back 1 week", use_container_width=True):
-        st.session_state.week_num = max(0, st.session_state.week_num - 1); st.session_state.play_mode = None; st.rerun()
+    st.slider("Week", 0, weeks, value=st.session_state.week_num,
+              key="_wksl", on_change=_sync_slider, label_visibility="collapsed")
 with bc3:
-    play_label = "⏸" if st.session_state.play_mode == "play" else "▶️"
-    if st.button(play_label, help="Play / Pause (3s/wk)", use_container_width=True):
-        st.session_state.play_mode = None if st.session_state.play_mode == "play" else "play"
+    if st.button("▶", use_container_width=True):
+        st.session_state.week_num = min(weeks, st.session_state.week_num + 1)
         st.rerun()
-with bc4:
-    ff_label = "⏸" if st.session_state.play_mode == "ff" else "⏩"
-    if st.button(ff_label, help="Fast / Pause (1s/wk)", use_container_width=True):
-        st.session_state.play_mode = None if st.session_state.play_mode == "ff" else "ff"
-        st.rerun()
-with bc5:
-    if st.button("⏭", help="Last week", use_container_width=True):
-        st.session_state.week_num = weeks; st.session_state.play_mode = None; st.rerun()
-with bc_info:
-    mode_txt = {"play": "▶ Playing (3s)", "ff": "⏩ Fast (1s)"}.get(st.session_state.play_mode, "⏸ Paused")
-    st.markdown(
-        f"<div style='text-align:center;padding:6px 0;font-size:18px;font-weight:700;color:#1a2a40;'>"
-        f"📅 Week {st.session_state.week_num} / {weeks}"
-        f"<span style='font-size:12px;color:#5D6D7E;font-weight:400;margin-left:12px;'>{mode_txt}</span></div>",
-        unsafe_allow_html=True,
-    )
 
 week = st.session_state.week_num
 state = states[week]
