@@ -564,21 +564,29 @@ st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{
 if "week_num" not in st.session_state:
     st.session_state.week_num = 0
 
-def _sync_slider():
-    st.session_state.week_num = st.session_state._wksl
-
-bc1, bc2, bc3 = st.columns([1, 6, 1])
-with bc1:
-    if st.button("◀", use_container_width=True):
-        st.session_state.week_num = max(0, st.session_state.week_num - 1)
-        st.rerun()
-with bc2:
-    st.slider("Week", 0, weeks, value=st.session_state.week_num,
-              key="_wksl", on_change=_sync_slider, label_visibility="collapsed")
-with bc3:
-    if st.button("▶", use_container_width=True):
-        st.session_state.week_num = min(weeks, st.session_state.week_num + 1)
-        st.rerun()
+b1, b2, b3, b4, info = st.columns([1, 1, 1, 1, 2])
+with b1:
+    if st.button("⏮ W0", use_container_width=True, disabled=st.session_state.week_num == 0):
+        st.session_state.week_num = 0
+with b2:
+    if st.button("◀ −1", use_container_width=True, disabled=st.session_state.week_num == 0):
+        st.session_state.week_num -= 1
+with b3:
+    if st.button("+1 ▶", use_container_width=True, disabled=st.session_state.week_num >= weeks):
+        st.session_state.week_num += 1
+with b4:
+    if st.button(f"W{weeks} ⏭", use_container_width=True, disabled=st.session_state.week_num >= weeks):
+        st.session_state.week_num = weeks
+with info:
+    pct = st.session_state.week_num / max(weeks, 1)
+    bar_w = int(pct * 100)
+    st.markdown(
+        f"<div style='padding:8px 0;'>"
+        f"<div style='font-size:20px;font-weight:800;color:#1a2a40;text-align:center;'>Week {st.session_state.week_num} <span style='font-size:13px;color:#7a8a9e;font-weight:400;'>/ {weeks}</span></div>"
+        f"<div style='background:#e0e4ea;border-radius:4px;height:6px;margin-top:4px;'>"
+        f"<div style='background:#4a90d9;height:6px;border-radius:4px;width:{bar_w}%;'></div></div></div>",
+        unsafe_allow_html=True,
+    )
 
 week = st.session_state.week_num
 state = states[week]
