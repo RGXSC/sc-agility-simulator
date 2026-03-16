@@ -640,39 +640,44 @@ dem_chart_data = pd.DataFrame({
     "Missed": [states[i]["missed"] for i in range(1, weeks + 1)],
 })
 
-# Shared Y scale based on max demand
-y_max = max(dem_chart_data["Demand"].max(), 1) * 1.1
+# Shared Y scale
+y_max = max(dem_chart_data["Demand"].max(), 1) * 1.15
 y_scale = alt.Scale(domain=[0, y_max])
 
-dem_bars = alt.Chart(dem_chart_data).mark_bar(
-    color="#4a90d9", opacity=0.5, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
+# Stacked bars: Sales (green) + Missed (red) on top
+bar_data = dem_chart_data.melt("Week", ["Sales", "Missed"], var_name="Type", value_name="Units")
+stacked_bars = alt.Chart(bar_data).mark_bar(
+    cornerRadiusTopLeft=3, cornerRadiusTopRight=3
 ).encode(
     x=alt.X("Week:O", title="Week"),
-    y=alt.Y("Demand:Q", title="Units/week", scale=y_scale),
-)
-sales_bars = alt.Chart(dem_chart_data).mark_bar(
-    color="#1a8a4a", opacity=0.8, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
-).encode(
-    x=alt.X("Week:O"),
-    y=alt.Y("Sales:Q", scale=y_scale),
-)
-missed_bars = alt.Chart(dem_chart_data).mark_bar(
-    color="#c0392b", opacity=0.7, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
-).encode(
-    x=alt.X("Week:O"),
-    y=alt.Y("Missed:Q", scale=y_scale),
-    y2=alt.Y2("Sales:Q"),  # stack missed on top of sales
+    y=alt.Y("Units:Q", title="Units/week", scale=y_scale, stack=True),
+    color=alt.Color("Type:N",
+        scale=alt.Scale(domain=["Sales", "Missed"], range=["#1a8a4a", "#c0392b"]),
+        legend=alt.Legend(orient="top", title=None)),
+    order=alt.Order("Type:N", sort="descending"),  # Sales at bottom, Missed on top
 )
 
+# Demand line on top
+demand_line = alt.Chart(dem_chart_data).mark_line(
+    color="#4a90d9", strokeWidth=3, strokeDash=[6, 3],
+).encode(
+    x=alt.X("Week:O"),
+    y=alt.Y("Demand:Q", scale=y_scale),
+)
+demand_dots = alt.Chart(dem_chart_data).mark_circle(
+    color="#4a90d9", size=40,
+).encode(x="Week:O", y=alt.Y("Demand:Q", scale=y_scale))
+
+# Current week rule
 rule_dc = alt.Chart(pd.DataFrame({"Week": [week]})).mark_rule(
     color="#d4850a", strokeWidth=2, strokeDash=[4, 2]
 ).encode(x="Week:O")
 
 st.altair_chart(
-    (dem_bars + sales_bars + missed_bars + rule_dc).properties(height=300),
+    (stacked_bars + demand_line + demand_dots + rule_dc).properties(height=300),
     use_container_width=True,
 )
-st.caption("🔵 Demand | 🟢 Sales | 🔴 Missed (stacked on sales) | 🟠 Current week")
+st.caption("- - - Demand (blue line) | 🟢 Sales (green bars) | 🔴 Missed (red bars, stacked) | 🟠 Current week")
 
 # ════════════════════════════════════════════════════════════════
 # CHARTS
