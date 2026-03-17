@@ -14,6 +14,7 @@ _DEFAULTS = {
     "order_freq": 4, "base_forecast": 100,
     "total_stock": 1500,
     "store_pct": 60, "wh_pct": 20, "semi_pct": 10,
+    "store_a_pct": 50, "smart_distrib": False,
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -378,11 +379,18 @@ def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, tot
     rev = ts * price; gm = rev - vc
     fx = base_forecast * 52 * price * fixed_pct * (week / 52)
     mg = gm - fx
+
+    # Useful production: sales / (initial stock + produced so far)
+    init_total = init_store + init_cw + init_semi + init_rawmat
+    total_in = init_total + tfp
+    useful_pct = (ts / total_in * 100) if total_in > 0 else 0
+
     return {'sales': ts, 'missed': tm, 'demand': td, 'revenue': rev,
             'svc_level': ts / td if td > 0 else 0, 'margin': mg,
             'stockout_wks': sum(1 for s in sub if s['missed'] > 0.5),
             'missed_a': sum(s['missed_a'] for s in sub),
-            'missed_b': sum(s['missed_b'] for s in sub)}
+            'missed_b': sum(s['missed_b'] for s in sub),
+            'useful_pct': useful_pct, 'useless_pct': 100 - useful_pct}
 
 
 # ════════════════════════════════════════════════════════════════
@@ -579,8 +587,8 @@ with st.sidebar:
 
     # ── 4. STORE DEMAND SPLIT ───────────────────────────────────
     st.markdown("### \U0001f3ea Store Demand Split")
-    store_a_pct = st.slider("Store A demand (%)", 0, 100, 50, 5)
-    smart_distrib = st.toggle("Smart Distribution (need-based)", value=False)
+    store_a_pct = st.slider("Store A demand (%)", 0, 100, step=5, key="store_a_pct")
+    smart_distrib = st.toggle("Smart Distribution (need-based)", key="smart_distrib")
     if smart_distrib:
         st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Warehouse allocates by net need")
     else:
@@ -700,9 +708,22 @@ with st.sidebar:
         cov = total_lt + lt["order_freq"]
         rec = 100 * cov
         st.session_state["total_stock"] = min(rec, 10000)
-        st.session_state["store_pct"] = 60
-        st.session_state["wh_pct"] = 0
-        st.session_state["semi_pct"] = 0
+        # All presets: Store A 60%, Smart Distribution ON
+        st.session_state["store_a_pct"] = 60
+        st.session_state["smart_distrib"] = True
+        # Stock distribution depends on strategy
+        if lt_name == "Push":
+            st.session_state["store_pct"] = 100
+            st.session_state["wh_pct"] = 0
+            st.session_state["semi_pct"] = 0
+        elif lt_name == "Medium":
+            st.session_state["store_pct"] = 80
+            st.session_state["wh_pct"] = 20
+            st.session_state["semi_pct"] = 0
+        else:  # Agile
+            st.session_state["store_pct"] = 60
+            st.session_state["wh_pct"] = 20
+            st.session_state["semi_pct"] = 10
         st.session_state["_preset_demand"] = dem_name
 
     # Header
@@ -731,6 +752,13 @@ with st.sidebar:
     with p2: st.button("\U0001f9f1 Flat", key="p_pf", use_container_width=True, on_click=apply_preset, args=("Push", "Flat 100"))
     with p3: st.button("\U0001f9f1 Growth", key="p_pg", use_container_width=True, on_click=apply_preset, args=("Push", "Growth \u2192300"))
     with p4: st.button("\U0001f9f1 Drop", key="p_pd", use_container_width=True, on_click=apply_preset, args=("Push", "Drop \u219240"))
+
+    st.caption(
+        "All presets: **Store A 60%**, **Smart Distrib ON**\n\n"
+        "\U0001f7e2 Agile: Store 60 / WH 20 / Semi 10 / RM 10\n\n"
+        "\U0001f7e1 Medium: Store 80 / WH 20\n\n"
+        "\U0001f534 Push: Store 100%"
+    )
 
     # Apply preset demand if just clicked
     if "_preset_demand" in st.session_state:
@@ -797,19 +825,34 @@ st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{
 if "week_num" not in st.session_state:
     st.session_state.week_num = 0
 
+# Clamp FIRST (handles sim length change, e.g. 52→26 while at week 40)
+if st.session_state.week_num > weeks:
+    st.session_state.week_num = weeks
+if st.session_state.week_num < 0:
+    st.session_state.week_num = 0
+
+def _nav_w0():
+    st.session_state.week_num = 0
+def _nav_minus():
+    st.session_state.week_num = max(0, st.session_state.week_num - 1)
+def _nav_plus():
+    st.session_state.week_num = min(weeks, st.session_state.week_num + 1)
+def _nav_end():
+    st.session_state.week_num = weeks
+
 b1, b2, b3, b4, info = st.columns([1, 1, 1, 1, 2])
 with b1:
-    if st.button("\u23ee W0", use_container_width=True, disabled=st.session_state.week_num == 0):
-        st.session_state.week_num = 0
+    st.button("\u23ee W0", use_container_width=True,
+              disabled=st.session_state.week_num == 0, on_click=_nav_w0)
 with b2:
-    if st.button("\u25c0 \u22121", use_container_width=True, disabled=st.session_state.week_num == 0):
-        st.session_state.week_num -= 1
+    st.button("\u25c0 \u22121", use_container_width=True,
+              disabled=st.session_state.week_num <= 0, on_click=_nav_minus)
 with b3:
-    if st.button("+1 \u25b6", use_container_width=True, disabled=st.session_state.week_num >= weeks):
-        st.session_state.week_num += 1
+    st.button("+1 \u25b6", use_container_width=True,
+              disabled=st.session_state.week_num >= weeks, on_click=_nav_plus)
 with b4:
-    if st.button(f"W{weeks} \u23ed", use_container_width=True, disabled=st.session_state.week_num >= weeks):
-        st.session_state.week_num = weeks
+    st.button(f"W{weeks} \u23ed", use_container_width=True,
+              disabled=st.session_state.week_num >= weeks, on_click=_nav_end)
 with info:
     pct = st.session_state.week_num / max(weeks, 1)
     bar_w = int(pct * 100)
@@ -822,13 +865,6 @@ with info:
     )
 
 week = st.session_state.week_num
-# Clamp to valid range (handles week slider change or sim length change)
-if week > weeks:
-    week = weeks
-    st.session_state.week_num = weeks
-if week < 0:
-    week = 0
-    st.session_state.week_num = 0
 state = states[week]
 cum = cumulative_kpis(states[1:], week, price, var_cost, fixed_pct, base_forecast, weeks,
                       init_store, init_cw, init_semi, init_rawmat)
@@ -860,7 +896,7 @@ with k7:
     sc = "#c0392b" if cum['stockout_wks'] > 0 else "#1a8a4a"
     st.markdown(kpi_card("Stockout Wks", f"{cum['stockout_wks']}/{week}", sc), unsafe_allow_html=True)
 with k8:
-    uf = final_kpis['useful_pct']
+    uf = cum['useful_pct']
     uc = "#1a8a4a" if uf > 80 else ("#d4850a" if uf > 50 else "#c0392b")
     st.markdown(kpi_card("Useful Prod.", f"{uf:.0f}%", uc), unsafe_allow_html=True)
 
