@@ -524,14 +524,31 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    total_stock = st.slider("Total Initial Stock (pcs)", 0, 5000,
-                            min(int(recommended_stock), 5000), 50, key="total_stock")
+    total_stock = st.slider("Total Initial Stock (pcs)", 0, 10000,
+                            min(int(recommended_stock), 10000), 50, key="total_stock")
 
-    # Percentage sliders
+    # Percentage inputs (number_input to avoid slider min/max conflicts)
     st.caption("Distribution (% of total):")
-    store_pct = st.slider("Store %", 0, 100, 60, 5, key="store_pct")
-    warehouse_pct = st.slider("Warehouse (Finished) %", 0, max(0, 100 - store_pct), 0, 5, key="wh_pct")
-    semi_pct = st.slider("Semi-Finished %", 0, max(0, 100 - store_pct - warehouse_pct), 0, 5, key="semi_pct")
+    # Pre-clamp session state to avoid value > max errors on rerun
+    _sp = st.session_state.get("store_pct", 60)
+    _wp = st.session_state.get("wh_pct", 20)
+    _sep = st.session_state.get("semi_pct", 10)
+    if _wp > 100 - _sp:
+        st.session_state["wh_pct"] = max(0, 100 - _sp)
+        _wp = st.session_state["wh_pct"]
+    if _sep > 100 - _sp - _wp:
+        st.session_state["semi_pct"] = max(0, 100 - _sp - _wp)
+        _sep = st.session_state["semi_pct"]
+
+    sc1, sc2, sc3 = st.columns(3)
+    with sc1:
+        store_pct = st.number_input("Store %", 0, 100, 60, 5, key="store_pct")
+    with sc2:
+        wh_max = max(0, 100 - store_pct)
+        warehouse_pct = st.number_input("Warehouse %", 0, wh_max, min(20, wh_max), 5, key="wh_pct")
+    with sc3:
+        semi_max = max(0, 100 - store_pct - warehouse_pct)
+        semi_pct = st.number_input("Semi-Fin %", 0, semi_max, min(10, semi_max), 5, key="semi_pct")
     rawmat_pct = 100 - store_pct - warehouse_pct - semi_pct
 
     # Compute actual units
@@ -818,6 +835,13 @@ with info:
     )
 
 week = st.session_state.week_num
+# Clamp to valid range (handles week slider change or sim length change)
+if week > weeks:
+    week = weeks
+    st.session_state.week_num = weeks
+if week < 0:
+    week = 0
+    st.session_state.week_num = 0
 state = states[week]
 cum = cumulative_kpis(states[1:], week, price, var_cost, fixed_pct, base_forecast, weeks,
                       init_store, init_cw, init_semi, init_rawmat)
