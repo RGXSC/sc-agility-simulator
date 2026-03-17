@@ -7,6 +7,19 @@ from datetime import datetime
 st.set_page_config(layout="wide", page_title="Supply Chain Agility Simulator", page_icon="\U0001f3ed")
 
 # ════════════════════════════════════════════════════════════════
+# SESSION STATE DEFAULTS (must be set BEFORE widgets render)
+# ════════════════════════════════════════════════════════════════
+_DEFAULTS = {
+    "mat_lt": 6, "semi_lt": 3, "fp_lt": 1, "dist_lt": 1,
+    "order_freq": 4, "base_forecast": 100,
+    "total_stock": 1500,
+    "store_pct": 60, "wh_pct": 20, "semi_pct": 10,
+}
+for _k, _v in _DEFAULTS.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
+# ════════════════════════════════════════════════════════════════
 # PRESET SCENARIOS (3 Lead Time × 3 Demand)
 # ════════════════════════════════════════════════════════════════
 LT_PROFILES = {
@@ -495,23 +508,23 @@ with st.sidebar:
     st.markdown("### \U0001f517 Lead Times (weeks)")
     c1, c2 = st.columns(2)
     with c1:
-        mat_lt = st.number_input("Material", 1, 24, 6, key="mat_lt")
-        semi_lt = st.number_input("Semi-Fin", 1, 12, 3, key="semi_lt")
+        mat_lt = st.number_input("Material", min_value=1, max_value=24, step=1, key="mat_lt")
+        semi_lt = st.number_input("Semi-Fin", min_value=1, max_value=12, step=1, key="semi_lt")
     with c2:
-        fp_lt = st.number_input("Finishing", 1, 12, 1, key="fp_lt")
-        dist_lt = st.number_input("Distribution", 1, 12, 1, key="dist_lt")
+        fp_lt = st.number_input("Finishing", min_value=1, max_value=12, step=1, key="fp_lt")
+        dist_lt = st.number_input("Distribution", min_value=1, max_value=12, step=1, key="dist_lt")
     phys_lt = mat_lt + semi_lt + fp_lt + dist_lt
     st.caption(f"Physical LT: **{phys_lt}** weeks")
 
     # ── 2. PLANNING ─────────────────────────────────────────────
     st.markdown("### \U0001f4cb Planning")
-    order_freq = st.slider("Order / Replenishment Frequency (weeks)", 1, 4, 4, key="order_freq")
+    order_freq = st.slider("Order / Replenishment Frequency (weeks)", min_value=1, max_value=4, step=1, key="order_freq")
     coverage = phys_lt + order_freq
     st.caption(f"Coverage target: **{coverage}** weeks (LT {phys_lt} + freq {order_freq})")
 
     # ── 3. DEMAND (base forecast needed for stock recommendation) ─
     st.markdown("### \U0001f4c8 Demand Profile")
-    base_forecast = st.number_input("Base Forecast (pcs/wk)", 0, 1000, 100, key="base_forecast")
+    base_forecast = st.number_input("Base Forecast (pcs/wk)", min_value=0, max_value=1000, step=10, key="base_forecast")
 
     # ── 4. INITIAL STOCK (with recommendation) ──────────────────
     st.markdown("### \U0001f4e6 Initial Stock")
@@ -524,12 +537,10 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    total_stock = st.slider("Total Initial Stock (pcs)", 0, 10000,
-                            min(int(recommended_stock), 10000), 50, key="total_stock")
+    total_stock = st.slider("Total Initial Stock (pcs)", min_value=0, max_value=10000, step=50, key="total_stock")
 
-    # Percentage inputs (number_input to avoid slider min/max conflicts)
+    # Percentage inputs — clamp session_state BEFORE widgets render
     st.caption("Distribution (% of total):")
-    # Pre-clamp session state to avoid value > max errors on rerun
     _sp = st.session_state.get("store_pct", 60)
     _wp = st.session_state.get("wh_pct", 20)
     _sep = st.session_state.get("semi_pct", 10)
@@ -538,17 +549,16 @@ with st.sidebar:
         _wp = st.session_state["wh_pct"]
     if _sep > 100 - _sp - _wp:
         st.session_state["semi_pct"] = max(0, 100 - _sp - _wp)
-        _sep = st.session_state["semi_pct"]
 
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
-        store_pct = st.number_input("Store %", 0, 100, 60, 5, key="store_pct")
+        store_pct = st.number_input("Store %", min_value=0, max_value=100, step=5, key="store_pct")
     with sc2:
         wh_max = max(0, 100 - store_pct)
-        warehouse_pct = st.number_input("Warehouse %", 0, wh_max, min(20, wh_max), 5, key="wh_pct")
+        warehouse_pct = st.number_input("Warehouse %", min_value=0, max_value=wh_max, step=5, key="wh_pct")
     with sc3:
         semi_max = max(0, 100 - store_pct - warehouse_pct)
-        semi_pct = st.number_input("Semi-Fin %", 0, semi_max, min(10, semi_max), 5, key="semi_pct")
+        semi_pct = st.number_input("Semi-Fin %", min_value=0, max_value=semi_max, step=5, key="semi_pct")
     rawmat_pct = 100 - store_pct - warehouse_pct - semi_pct
 
     # Compute actual units
@@ -694,7 +704,7 @@ with st.sidebar:
         total_lt = lt["mat_lt"] + lt["semi_lt"] + lt["fp_lt"] + lt["dist_lt"]
         cov = total_lt + lt["order_freq"]
         rec = 100 * cov
-        st.session_state["total_stock"] = min(rec, 5000)
+        st.session_state["total_stock"] = min(rec, 10000)
         st.session_state["store_pct"] = 60
         st.session_state["wh_pct"] = 0
         st.session_state["semi_pct"] = 0
