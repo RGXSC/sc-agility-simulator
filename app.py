@@ -7,6 +7,51 @@ from datetime import datetime
 st.set_page_config(layout="wide", page_title="Supply Chain Agility Simulator", page_icon="\U0001f3ed")
 
 # ════════════════════════════════════════════════════════════════
+# PRESET SCENARIOS (3 Lead Time × 3 Demand)
+# ════════════════════════════════════════════════════════════════
+LT_PROFILES = {
+    "Agile": {"mat_lt": 4, "semi_lt": 2, "fp_lt": 1, "dist_lt": 1, "order_freq": 1},
+    "Medium": {"mat_lt": 8, "semi_lt": 4, "fp_lt": 2, "dist_lt": 2, "order_freq": 2},
+    "Push":   {"mat_lt": 12, "semi_lt": 6, "fp_lt": 3, "dist_lt": 3, "order_freq": 4},
+}
+
+def make_demand_flat(weeks, base=100):
+    return [0] + [base] * weeks
+
+def make_demand_growth(weeks, base=100, target=300, ramp_weeks=5):
+    d = [0]
+    for w in range(1, weeks + 1):
+        if w <= ramp_weeks:
+            d.append(int(round(base + (target - base) * w / ramp_weeks)))
+        else:
+            d.append(target)
+    return d
+
+def make_demand_drop(weeks, base=100, target=40, drop_weeks=1):
+    d = [0]
+    for w in range(1, weeks + 1):
+        if w <= drop_weeks:
+            d.append(int(round(base + (target - base) * w / drop_weeks)))
+        else:
+            d.append(target)
+    return d
+
+DEMAND_PROFILES = {
+    "Flat 100":    lambda wks: make_demand_flat(wks, 100),
+    "Growth →300": lambda wks: make_demand_growth(wks, 100, 300, 5),
+    "Drop →40":    lambda wks: make_demand_drop(wks, 100, 40, 1),
+}
+
+
+# ════════════════════════════════════════════════════════════════
+# VALORIZATION CONSTANTS
+# ════════════════════════════════════════════════════════════════
+VALOR_RAW_MAT = 0.50   # Raw material = 50% of product cost
+VALOR_SEMI    = 0.75   # Semi-finished = 75% of product cost
+VALOR_FINISHED = 1.00  # Finished product = 100%
+
+
+# ════════════════════════════════════════════════════════════════
 # SIMULATION ENGINE — 2 STORES
 # ════════════════════════════════════════════════════════════════
 @st.cache_data
@@ -46,7 +91,6 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
     dist_pipe_a = [0.0] * max(1, dist_lt)
     dist_pipe_b = [0.0] * max(1, dist_lt)
 
-    # Initial store stock: always 50/50 split (deliberate "push" allocation)
     store_a = float(init_store) / 2.0
     store_b = float(init_store) / 2.0
     raw_mat = float(init_rawmat)
@@ -62,7 +106,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
     ow = list(range(order_freq, weeks + 1, order_freq)) if order_freq > 1 else list(range(1, weeks + 1))
     states = []
 
-    # Week 0: initial state — before any demand or production
+    # Week 0: initial state
     s0 = {
         'week': 0,
         'demand': 0, 'demand_a': 0, 'demand_b': 0,
@@ -85,7 +129,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         'dist_pipe_b': [0.0] * max(1, dist_lt),
         'order': 0, 'pending': 0, 'backlog': 0,
         'coverage': coverage,
-        'comment': f"⏳ Week 0 — Initial state. Store A: {store_a:.0f}, Store B: {store_b:.0f}, "
+        'comment': f"\u23f3 Week 0 \u2014 Initial state. Store A: {store_a:.0f}, Store B: {store_b:.0f}, "
                    f"CW: {cw:.0f}, Semi: {semi:.0f}, Raw Mat: {raw_mat:.0f}. "
                    f"Total stock: {store_a + store_b + cw + semi + raw_mat:.0f} pcs ready.",
     }
@@ -95,7 +139,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s = {'week': w}
         dem_total = demand[w]
         dem_a = round(dem_total * pct_a)
-        dem_b = dem_total - dem_a  # ensure exact total
+        dem_b = dem_total - dem_a
         ff = dem_total
         s['demand'] = dem_total; s['demand_a'] = dem_a; s['demand_b'] = dem_b
         s['forecast'] = round(ff, 1)
@@ -135,7 +179,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             'store_before': round(avail_a + avail_b, 1),
         })
 
-        # 4. Supplier — linear ramp: base × (1 + n × ramp%)
+        # 4. Supplier — linear ramp
         if pb > 0.01:
             if not ps: ps = True; pn = 0; pc = float(cap_start)
             else: pn += 1; pc = min(cap_start * (1 + pn * cap_ramp), cap_start * 10)
@@ -168,13 +212,10 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['fp_input'] = round(fi, 1); s['fp_cap'] = round(fpc, 0)
         s['semi_stock'] = round(semi, 1)
 
-        # 8. CW — smart allocation to 2 dist pipes based on net need
+        # 8. CW — allocation to 2 dist pipes
         ship_out = math.ceil(cw); cw = 0.0
         s['cw_shipped'] = round(ship_out, 1); s['cw_stock'] = 0.0
 
-        # Net need = (forecast_store × dist_lt) - current_store_stock
-        # Smart: proportional allocation based on relative need
-        # Dumb (push): always 50/50 regardless of actual need
         if smart_distrib:
             need_a = max(0, dem_a * dist_lt - store_a)
             need_b = max(0, dem_b * dist_lt - store_b)
@@ -188,7 +229,6 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             else:
                 alloc_a = 0; alloc_b = 0
         else:
-            # Push model: 50/50 split regardless of demand
             alloc_a = round(ship_out * 0.5)
             alloc_b = ship_out - alloc_a
         s['alloc_a'] = round(alloc_a, 1); s['alloc_b'] = round(alloc_b, 1)
@@ -206,7 +246,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['dist_pipe_a'] = [round(x, 1) for x in dist_pipe_a]
         s['dist_pipe_b'] = [round(x, 1) for x in dist_pipe_b]
 
-        # 10. Order (based on total)
+        # 10. Order
         if w in ow:
             pnd = co - cas; tgt = ff * coverage
             od = math.ceil(max(0, tgt - store_total - pnd))
@@ -218,12 +258,10 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
 
         # Commentary
         parts = []
-        # Store A
         if missed_a > 0.5:
             parts.append(f"\U0001f534 A: lost {missed_a:.0f}/{dem_a:.0f}.")
         else:
             parts.append(f"\U0001f7e2 A: sold {sales_a:.0f}/{dem_a:.0f}, stk {store_a:.0f}.")
-        # Store B
         if missed_b > 0.5:
             parts.append(f"\U0001f534 B: lost {missed_b:.0f}/{dem_b:.0f}.")
         else:
@@ -240,37 +278,94 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
 
     return states
 
-def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks, init_stock_total=0):
+
+def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks,
+                 init_store=0, init_cw=0, init_semi=0, init_rawmat=0):
     ts = sum(s['sales'] for s in states)
     tm = sum(s['missed'] for s in states)
     td = sum(s['demand'] for s in states)
     tfp = sum(s['fp_input'] for s in states)
-    # Var cost = production DURING sim + initial stock (already bought/produced before sim)
-    total_units_costed = tfp + init_stock_total
-    rev = ts * price; vc = total_units_costed * var_cost; gm = rev - vc
+
+    # Valorized initial stock cost
+    init_stock_value = (init_store * var_cost * VALOR_FINISHED
+                       + init_cw * var_cost * VALOR_FINISHED
+                       + init_semi * var_cost * VALOR_SEMI
+                       + init_rawmat * var_cost * VALOR_RAW_MAT)
+
+    # Production cost during sim (each finished unit = full var_cost)
+    prod_cost = tfp * var_cost
+
+    # Total variable cost
+    vc = init_stock_value + prod_cost
+
+    rev = ts * price
+    gm = rev - vc
     fx = base_forecast * 52 * price * fixed_pct * (weeks / 52)
     mg = gm - fx
+
+    # End stock
+    last = states[-1] if states else {}
+    end_store = last.get('store_a', 0) + last.get('store_b', 0)
+    end_cw = last.get('cw_stock', 0)
+    end_semi = last.get('semi_stock', 0)
+    end_rawmat = last.get('raw_mat_stock', 0)
+    end_stock_units = end_store + end_cw + end_semi + end_rawmat
+
+    # Valorized end stock
+    end_stock_value = (end_store * var_cost * VALOR_FINISHED
+                      + end_cw * var_cost * VALOR_FINISHED
+                      + end_semi * var_cost * VALOR_SEMI
+                      + end_rawmat * var_cost * VALOR_RAW_MAT)
+
+    # Pipeline stock at end
+    end_pipe_units = (sum(last.get('mat_pipe', [0]))
+                     + sum(last.get('semi_pipe', [0]))
+                     + sum(last.get('fp_pipe', [0]))
+                     + sum(last.get('dist_pipe_a', [0]))
+                     + sum(last.get('dist_pipe_b', [0])))
+
+    # Useful vs Useless production
+    total_system_units = ts + end_stock_units + end_pipe_units
+    useful_pct = (ts / total_system_units * 100) if total_system_units > 0 else 0
+    useless_units = end_stock_units + end_pipe_units
+    useless_pct = (useless_units / total_system_units * 100) if total_system_units > 0 else 0
+
     return {
         'total_demand': td, 'total_sales': ts, 'total_missed': tm,
         'svc_level': ts / td if td > 0 else 0,
         'stockout_weeks': sum(1 for s in states if s['missed'] > 0.5),
         'revenue': rev, 'var_cost': vc, 'gm': gm, 'fixed': fx,
         'margin': mg, 'margin_pct': mg / rev if rev > 0 else 0,
-        'produced': tfp, 'init_stock_cost': init_stock_total * var_cost,
-        'store_end': states[-1]['store_stock'],
+        'produced': tfp,
+        'init_stock_value': init_stock_value,
+        'end_stock_value': end_stock_value,
+        'end_stock_units': end_stock_units,
+        'end_pipe_units': end_pipe_units,
+        'store_end': end_store,
         'lost_rev': tm * price,
         'missed_a': sum(s['missed_a'] for s in states),
         'missed_b': sum(s['missed_b'] for s in states),
         'sales_a': sum(s['sales_a'] for s in states),
         'sales_b': sum(s['sales_b'] for s in states),
+        'useful_pct': useful_pct,
+        'useless_pct': useless_pct,
+        'useful_units': ts,
+        'useless_units': useless_units,
+        'total_system_units': total_system_units,
     }
 
-def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, total_weeks, init_stock_total=0):
+
+def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, total_weeks,
+                    init_store=0, init_cw=0, init_semi=0, init_rawmat=0):
     sub = states[:week]
     ts = sum(s['sales'] for s in sub); tm = sum(s['missed'] for s in sub)
     td = sum(s['demand'] for s in sub); tfp = sum(s['fp_input'] for s in sub)
-    total_units_costed = tfp + init_stock_total
-    rev = ts * price; vc = total_units_costed * var_cost; gm = rev - vc
+    init_stock_value = (init_store * var_cost * VALOR_FINISHED
+                       + init_cw * var_cost * VALOR_FINISHED
+                       + init_semi * var_cost * VALOR_SEMI
+                       + init_rawmat * var_cost * VALOR_RAW_MAT)
+    vc = init_stock_value + tfp * var_cost
+    rev = ts * price; gm = rev - vc
     fx = base_forecast * 52 * price * fixed_pct * (week / 52)
     mg = gm - fx
     return {'sales': ts, 'missed': tm, 'demand': td, 'revenue': rev,
@@ -281,9 +376,10 @@ def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, tot
 
 
 # ════════════════════════════════════════════════════════════════
-# SC VISUALIZATION — SUPPLIER ▸▸▸ CW ▸▸ STORE A / STORE B
+# SC VISUALIZATION — with stock valorization display
 # ════════════════════════════════════════════════════════════════
 def make_sc_html(state, params):
+    var_cost = params.get('var_cost', 200)
     cap_ref = max(1, params['cap_start'] * 2.5)
 
     def pipe_box_style(v, hue):
@@ -301,22 +397,25 @@ def make_sc_html(state, params):
         inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
         return f'<div style="text-align:center;flex:1 1 auto;"><div style="font-size:8px;color:#8a96a6;margin-bottom:3px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
 
-    def stage_card(title, stock, hue, icon, sub="", alert=""):
+    def stage_card(title, stock, hue, icon, sub="", alert="", valor_rate=1.0):
         is_alert = alert != ""
         bdr = "hsl(0,55%,60%)" if is_alert else f"hsl({hue},30%,75%)"
         bg = "linear-gradient(180deg,hsl(0,70%,97%),hsl(0,50%,94%))" if is_alert else f"linear-gradient(180deg,hsl({hue},20%,99%),hsl({hue},25%,95%))"
+        valor_eur = stock * var_cost * valor_rate
+        valor_txt = f"\u20ac{valor_eur:,.0f} ({valor_rate*100:.0f}%)" if stock > 0.5 else ""
         return f'''<div style="background:{bg};border:2px solid {bdr};border-radius:12px;
             padding:10px 12px;min-width:90px;text-align:center;flex:0 0 auto;">
             <div style="font-size:20px;line-height:1;">{icon}</div>
             <div style="font-size:8px;font-weight:700;color:hsl({hue},35%,42%);text-transform:uppercase;letter-spacing:0.8px;margin:3px 0;">{title}</div>
             <div style="font-size:24px;font-weight:800;color:hsl({hue},40%,28%);">{stock:.0f}</div>
             {'<div style="font-size:8px;color:#7a8a9e;margin-top:2px;">'+sub+'</div>' if sub else ''}
+            {'<div style="font-size:8px;color:#9aa;margin-top:1px;font-style:italic;">'+valor_txt+'</div>' if valor_txt else ''}
             {'<div style="font-size:9px;color:hsl(0,60%,45%);font-weight:700;margin-top:2px;">'+alert+'</div>' if alert else ''}
         </div>'''
 
     arr = '<div style="color:#b0bac6;font-size:20px;display:flex;align-items:center;flex:0 0 auto;padding:0 2px;">\u25b8</div>'
 
-    H_S = 215; H_SA = 210; H_SB = 270; H_DI = 255; H_CW = 42; H_FP = 38; H_SE = 24; H_RM = 18; H_SU = 145
+    H_SA = 210; H_SB = 270; H_CW = 42; H_FP = 38; H_SE = 24; H_RM = 18; H_SU = 145
 
     alert_a = f"LOST {state['missed_a']:.0f}" if state['missed_a'] > 0.5 else ""
     alert_b = f"LOST {state['missed_b']:.0f}" if state['missed_b'] > 0.5 else ""
@@ -333,39 +432,36 @@ def make_sc_html(state, params):
         <span style="font-size:9px;color:#8a96a6;font-weight:700;letter-spacing:1px;">\u25c2 INFORMATION FLOW</span>
     </div>'''
 
-    # Main upstream flow (Supplier → Central Warehouse)
     upstream = f'''<div style="display:flex;align-items:center;gap:4px;flex:1 1 auto;">
         {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
         {arr}
         {pipe_html(state['mat_pipe'], H_RM, f"Material {params['mat_lt']}wk")}
         {arr}
-        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6")}
+        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT)}
         {arr}
         {pipe_html(state['semi_pipe'], H_SE, f"Semi {params['semi_lt']}wk")}
         {arr}
-        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk")}
+        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI)}
         {arr}
         {pipe_html(state['fp_pipe'], H_FP, f"Finish {params['fp_lt']}wk")}
         {arr}
-        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", "Flow-thru")}
+        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", "Flow-thru", valor_rate=VALOR_FINISHED)}
     </div>'''
 
-    # Fork: CW → Dist A → Store A  /  CW → Dist B → Store B
     branch_a = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr}
         {pipe_html(state['dist_pipe_a'], H_SA, f"Dist A {params['dist_lt']}wk")}
         {arr}
-        {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a)}
+        {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a, valor_rate=VALOR_FINISHED)}
     </div>'''
 
     branch_b = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr}
         {pipe_html(state['dist_pipe_b'], H_SB, f"Dist B {params['dist_lt']}wk")}
         {arr}
-        {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b)}
+        {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b, valor_rate=VALOR_FINISHED)}
     </div>'''
 
-    # Layout: upstream stretches, fork on right
     flow = f'''<div style="display:flex;align-items:center;gap:0px;padding:12px 10px;width:100%;box-sizing:border-box;
         background:linear-gradient(90deg,hsl(145,10%,97%),hsl(215,18%,97%));
         border:1px solid hsl(215,18%,90%);border-radius:12px;">
@@ -389,63 +485,104 @@ def make_sc_html(state, params):
 
 
 # ════════════════════════════════════════════════════════════════
-# SIDEBAR
+# SIDEBAR — Lead Times first, Stock with recommendation
 # ════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("## \u2699\ufe0f Supply Chain Setup")
     weeks = st.select_slider("Simulation Length (weeks)", options=[13, 26, 39, 52], value=26)
 
-    st.markdown("### \U0001f4e6 Initial Stock")
-    init_store = st.slider("Store (total, split 50/50)", 0, 3000, 1500, 50)
-    init_cw = st.slider("Central Warehouse (Finished)", 0, 1000, 0, 50)
-    init_semi = st.slider("Semi-Finished (WIP)", 0, 1000, 0, 50)
-    init_rawmat = st.slider("Raw Material", 0, 1000, 0, 50)
-    total_init = init_store + init_cw + init_semi + init_rawmat
-    st.caption(f"Total initial stock: **{total_init}** pcs (Store: {init_store//2} + {init_store//2})")
+    # ── 1. LEAD TIMES (first!) ──────────────────────────────────
+    st.markdown("### \U0001f517 Lead Times (weeks)")
+    c1, c2 = st.columns(2)
+    with c1:
+        mat_lt = st.number_input("Material", 1, 24, 6, key="mat_lt")
+        semi_lt = st.number_input("Semi-Fin", 1, 12, 3, key="semi_lt")
+    with c2:
+        fp_lt = st.number_input("Finishing", 1, 12, 1, key="fp_lt")
+        dist_lt = st.number_input("Distribution", 1, 12, 1, key="dist_lt")
+    phys_lt = mat_lt + semi_lt + fp_lt + dist_lt
+    st.caption(f"Physical LT: **{phys_lt}** weeks")
 
+    # ── 2. PLANNING ─────────────────────────────────────────────
+    st.markdown("### \U0001f4cb Planning")
+    order_freq = st.slider("Order / Replenishment Frequency (weeks)", 1, 4, 4, key="order_freq")
+    coverage = phys_lt + order_freq
+    st.caption(f"Coverage target: **{coverage}** weeks (LT {phys_lt} + freq {order_freq})")
+
+    # ── 3. DEMAND (base forecast needed for stock recommendation) ─
+    st.markdown("### \U0001f4c8 Demand Profile")
+    base_forecast = st.number_input("Base Forecast (pcs/wk)", 0, 1000, 100, key="base_forecast")
+
+    # ── 4. INITIAL STOCK (with recommendation) ──────────────────
+    st.markdown("### \U0001f4e6 Initial Stock")
+
+    recommended_stock = base_forecast * coverage
+    st.markdown(
+        f'<div style="color:#8a96a6;font-size:12px;font-style:italic;margin-bottom:8px;">'
+        f'[Recommended: <b>{recommended_stock:,.0f}</b> pcs = '
+        f'{base_forecast}/wk \u00d7 {coverage} wks coverage]</div>',
+        unsafe_allow_html=True
+    )
+
+    total_stock = st.slider("Total Initial Stock (pcs)", 0, 5000,
+                            min(int(recommended_stock), 5000), 50, key="total_stock")
+
+    # Percentage sliders
+    st.caption("Distribution (% of total):")
+    store_pct = st.slider("Store %", 0, 100, 60, 5, key="store_pct")
+    warehouse_pct = st.slider("Warehouse (Finished) %", 0, max(0, 100 - store_pct), 0, 5, key="wh_pct")
+    semi_pct = st.slider("Semi-Finished %", 0, max(0, 100 - store_pct - warehouse_pct), 0, 5, key="semi_pct")
+    rawmat_pct = 100 - store_pct - warehouse_pct - semi_pct
+
+    # Compute actual units
+    init_store = int(round(total_stock * store_pct / 100))
+    init_cw = int(round(total_stock * warehouse_pct / 100))
+    init_semi = int(round(total_stock * semi_pct / 100))
+    init_rawmat = total_stock - init_store - init_cw - init_semi
+
+    # Valorized stock cost
+    var_cost_for_display = 200  # will be overridden below, preview only
+    st.markdown(
+        f'<div style="background:#f0f2f5;border-radius:8px;padding:8px 12px;font-size:11px;line-height:1.8;">'
+        f'<b>Store:</b> {init_store} pcs ({store_pct}%) \u2014 <span style="color:#666;">100% cost</span><br>'
+        f'<b>Warehouse:</b> {init_cw} pcs ({warehouse_pct}%) \u2014 <span style="color:#666;">100% cost</span><br>'
+        f'<b>Semi-Fin:</b> {init_semi} pcs ({semi_pct}%) \u2014 <span style="color:#666;">75% cost</span><br>'
+        f'<b>Raw Mat:</b> {init_rawmat} pcs ({rawmat_pct}%) \u2014 <span style="color:#666;">50% cost</span><br>'
+        f'<b>Total:</b> {total_stock} pcs \u00b7 '
+        f'<span style="color:#8a96a6;font-style:italic;">[rec: {recommended_stock:,.0f}]</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    total_init = total_stock
+
+    # ── 5. STORE DEMAND SPLIT ───────────────────────────────────
     st.markdown("### \U0001f3ea Store Demand Split")
     store_a_pct = st.slider("Store A demand (%)", 0, 100, 50, 5)
     smart_distrib = st.toggle("Smart Distribution (need-based)", value=False)
     if smart_distrib:
-        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — Warehouse allocates by net need")
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Warehouse allocates by net need")
     else:
-        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** — Warehouse allocates 50/50 (push)")
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Warehouse allocates 50/50 (push)")
 
-    st.markdown("### \U0001f517 Lead Times (weeks)")
-    c1, c2 = st.columns(2)
-    with c1:
-        mat_lt = st.number_input("Material", 1, 12, 6)
-        semi_lt = st.number_input("Semi-Fin", 1, 12, 3)
-    with c2:
-        fp_lt = st.number_input("Finishing", 1, 12, 1)
-        dist_lt = st.number_input("Distribution", 1, 12, 1)
-    phys_lt = mat_lt + semi_lt + fp_lt + dist_lt
-    st.caption(f"Physical LT: **{phys_lt}** weeks")
-
-    st.markdown("### \U0001f4cb Planning")
-    order_freq = st.slider("Order Frequency (weeks)", 1, 4, 4)
-    coverage = phys_lt + order_freq
-    st.caption(f"Coverage target: **{coverage}** weeks (LT + freq)")
-
-    st.markdown("### \U0001f4c8 Demand Profile")
-    base_forecast = st.number_input("Base Forecast (pcs/wk)", 10, 1000, 100)
-
+    # ── 6. DEMAND CURVE ─────────────────────────────────────────
     custom_demand = None
     demand_mult = 1.0; ramp_start = 1; ramp_end = 1
 
     bf = base_forecast
-    preset = st.selectbox("Demand shape", [
-        "➡️ Flat (constant demand)",
-        "📈 Linear ramp then flat",
-        "🔔 Poisson curve (launch peak)",
+    preset_shape = st.selectbox("Demand shape", [
+        "\u27a1\ufe0f Flat (constant demand)",
+        "\U0001f4c8 Linear ramp then flat",
+        "\U0001f4c9 Linear drop then flat",
+        "\U0001f514 Poisson curve (launch peak)",
     ])
 
-    if "Flat" in preset:
+    if "Flat" in preset_shape:
         init_demand = [0] + [bf] * weeks
         st.caption(f"Constant demand: **{bf}** pcs/wk for {weeks} weeks")
 
-    elif "Linear" in preset:
-        end_dem = st.slider("Target demand (pcs/wk)", bf, bf * 8, bf * 3, max(1, bf // 4), key="lr_end")
+    elif "Linear ramp" in preset_shape:
+        end_dem = st.slider("Target demand (pcs/wk)", 0, 1000, min(bf * 3, 1000), 10, key="lr_end")
         ramp_wks = st.slider("Ramp duration (weeks)", 1, weeks, min(weeks // 3, 8), key="lr_wks")
         init_demand = [0]
         for w in range(1, weeks + 1):
@@ -453,21 +590,33 @@ with st.sidebar:
                 val = bf + (end_dem - bf) * w / ramp_wks
             else:
                 val = end_dem
-            init_demand.append(int(round(val)))
-        st.caption(f"Demand: **{bf}** → **{end_dem}** over {ramp_wks} wks, then flat at **{end_dem}**")
+            init_demand.append(max(0, int(round(val))))
+        st.caption(f"Demand: **{bf}** \u2192 **{end_dem}** over {ramp_wks} wks, then flat at **{end_dem}**")
+
+    elif "Linear drop" in preset_shape:
+        drop_dem = st.slider("Floor demand (pcs/wk)", 0, 1000, max(0, bf // 3), 10, key="ld_end")
+        drop_wks = st.slider("Drop duration (weeks)", 1, weeks, 1, key="ld_wks")
+        init_demand = [0]
+        for w in range(1, weeks + 1):
+            if w <= drop_wks:
+                val = bf + (drop_dem - bf) * w / drop_wks
+            else:
+                val = drop_dem
+            init_demand.append(max(0, int(round(val))))
+        st.caption(f"Demand: **{bf}** \u2192 **{drop_dem}** over {drop_wks} wks, then flat at **{drop_dem}**")
 
     else:  # Poisson
         peak_wk = st.slider("Peak week", 1, weeks, min(weeks // 3, 8), key="pk_wk")
-        peak_h = st.slider("Peak demand (pcs/wk)", bf, bf * 8, bf * 4, max(1, bf // 4), key="pk_h")
+        peak_h = st.slider("Peak demand (pcs/wk)", 0, 1000, min(bf * 4, 1000), 10, key="pk_h")
         spread = st.slider("Spread (weeks)", 1.0, float(max(2, weeks // 2)), 4.0, 0.5, key="pk_sp")
         init_demand = [0]
         for w in range(1, weeks + 1):
             val = peak_h * np.exp(-0.5 * ((w - peak_wk) / spread) ** 2) + bf * 0.05
             init_demand.append(max(int(round(val)), 0))
-        st.caption(f"Peak: **{peak_h}** at W{peak_wk}, spread ±{spread:.0f} wks")
+        st.caption(f"Peak: **{peak_h}** at W{peak_wk}, spread \u00b1{spread:.0f} wks")
 
     # Editable table
-    st.caption("✏️ Edit demand per week:")
+    st.caption("\u270f\ufe0f Edit demand per week:")
     demand_df = pd.DataFrame({
         "Week": list(range(1, weeks + 1)),
         "Demand (pcs)": init_demand[1:weeks + 1],
@@ -482,8 +631,7 @@ with st.sidebar:
         key="demand_editor",
     )
 
-    # Build custom_demand from edited table
-    custom_demand = [0]  # week 0
+    custom_demand = [0]
     for _, row in edited.iterrows():
         custom_demand.append(int(row["Demand (pcs)"]))
 
@@ -491,21 +639,105 @@ with st.sidebar:
     avg_dem = total_dem / max(weeks, 1)
     peak_val = max(custom_demand[1:]) if weeks > 0 else 0
     peak_wk_idx = custom_demand[1:].index(peak_val) + 1 if peak_val > 0 else 0
+    st.caption(f"Total: **{total_dem:,}** pcs \u00b7 Avg: **{avg_dem:.0f}**/wk \u00b7 Peak: **{peak_val}** at W{peak_wk_idx}")
 
-    st.caption(f"Total: **{total_dem:,}** pcs · Avg: **{avg_dem:.0f}**/wk · Peak: **{peak_val}** at W{peak_wk_idx}")
-
+    # ── 7. CAPACITY ─────────────────────────────────────────────
     st.markdown("### \U0001f3ed Capacity")
     cap_start = st.number_input("Starting Capacity (pcs/wk)", 10, 1000, 100)
     cap_ramp = st.slider("Ramp-up (%/week, linear)", 0, 50, 20) / 100
-    # Show example ramp progression
     ex_caps = [int(cap_start * (1 + i * cap_ramp)) for i in range(5)]
-    st.caption(f"Linear ramp: {' → '.join(str(c) for c in ex_caps)} ... (based on W1)")
+    st.caption(f"Linear ramp: {' \u2192 '.join(str(c) for c in ex_caps)} ... (based on W1)")
 
+    # ── 8. ECONOMICS ────────────────────────────────────────────
     st.markdown("### \U0001f4b0 Economics")
     price = st.number_input("Selling Price (\u20ac)", 100, 10000, 1000, 100)
-    var_cost = st.number_input("Variable Cost (\u20ac)", 10, 5000, 200, 10)
+    var_cost = st.number_input("Variable Cost / Finished Product (\u20ac)", 10, 5000, 200, 10)
+    st.markdown(
+        f'<div style="color:#8a96a6;font-size:11px;font-style:italic;">'
+        f'Raw mat: \u20ac{var_cost * VALOR_RAW_MAT:.0f} (50%) \u00b7 '
+        f'Semi-fin: \u20ac{var_cost * VALOR_SEMI:.0f} (75%) \u00b7 '
+        f'Finished: \u20ac{var_cost:.0f} (100%)</div>',
+        unsafe_allow_html=True
+    )
     fixed_pct = st.slider("Fixed Cost (% annual fcst rev)", 0, 100, 45) / 100
 
+    # ── 9. QUICK SCENARIOS (3×3 grid) ──────────────────────────
+    st.markdown("---")
+    st.markdown("### \U0001f3af Quick Scenarios")
+    st.caption("3 Lead Time \u00d7 3 Demand \u2014 click to load:")
+
+    def apply_preset(lt_name, dem_name):
+        lt = LT_PROFILES[lt_name]
+        st.session_state["mat_lt"] = lt["mat_lt"]
+        st.session_state["semi_lt"] = lt["semi_lt"]
+        st.session_state["fp_lt"] = lt["fp_lt"]
+        st.session_state["dist_lt"] = lt["dist_lt"]
+        st.session_state["order_freq"] = lt["order_freq"]
+        st.session_state["base_forecast"] = 100
+        total_lt = lt["mat_lt"] + lt["semi_lt"] + lt["fp_lt"] + lt["dist_lt"]
+        cov = total_lt + lt["order_freq"]
+        rec = 100 * cov
+        st.session_state["total_stock"] = min(rec, 5000)
+        st.session_state["store_pct"] = 60
+        st.session_state["wh_pct"] = 0
+        st.session_state["semi_pct"] = 0
+        st.session_state["_preset_demand"] = dem_name
+
+    # Header
+    h1, h2, h3, h4 = st.columns([1.2, 1, 1, 1])
+    with h2: st.markdown("**Flat 100**")
+    with h3: st.markdown("**Growth**")
+    with h4: st.markdown("**Drop**")
+
+    # Row: Agile (LT=8, freq=1)
+    a1, a2, a3, a4 = st.columns([1.2, 1, 1, 1])
+    with a1: st.markdown("\U0001f7e2 **Agile**\n\n*LT=8, f=1*")
+    with a2:
+        if st.button("\u26a1 Flat", key="p_af", use_container_width=True):
+            apply_preset("Agile", "Flat 100"); st.rerun()
+    with a3:
+        if st.button("\u26a1 Growth", key="p_ag", use_container_width=True):
+            apply_preset("Agile", "Growth \u2192300"); st.rerun()
+    with a4:
+        if st.button("\u26a1 Drop", key="p_ad", use_container_width=True):
+            apply_preset("Agile", "Drop \u219240"); st.rerun()
+
+    # Row: Medium (LT=16, freq=2)
+    m1, m2, m3, m4 = st.columns([1.2, 1, 1, 1])
+    with m1: st.markdown("\U0001f7e1 **Medium**\n\n*LT=16, f=2*")
+    with m2:
+        if st.button("\U0001f536 Flat", key="p_mf", use_container_width=True):
+            apply_preset("Medium", "Flat 100"); st.rerun()
+    with m3:
+        if st.button("\U0001f536 Growth", key="p_mg", use_container_width=True):
+            apply_preset("Medium", "Growth \u2192300"); st.rerun()
+    with m4:
+        if st.button("\U0001f536 Drop", key="p_md", use_container_width=True):
+            apply_preset("Medium", "Drop \u219240"); st.rerun()
+
+    # Row: Push (LT=24, freq=4)
+    p1, p2, p3, p4 = st.columns([1.2, 1, 1, 1])
+    with p1: st.markdown("\U0001f534 **Push**\n\n*LT=24, f=4*")
+    with p2:
+        if st.button("\U0001f9f1 Flat", key="p_pf", use_container_width=True):
+            apply_preset("Push", "Flat 100"); st.rerun()
+    with p3:
+        if st.button("\U0001f9f1 Growth", key="p_pg", use_container_width=True):
+            apply_preset("Push", "Growth \u2192300"); st.rerun()
+    with p4:
+        if st.button("\U0001f9f1 Drop", key="p_pd", use_container_width=True):
+            apply_preset("Push", "Drop \u219240"); st.rerun()
+
+    # Apply preset demand if just clicked
+    if "_preset_demand" in st.session_state:
+        dem_key = st.session_state.pop("_preset_demand")
+        if dem_key in DEMAND_PROFILES:
+            custom_demand = DEMAND_PROFILES[dem_key](weeks)
+
+
+# ════════════════════════════════════════════════════════════════
+# BUILD PARAMS & RUN
+# ════════════════════════════════════════════════════════════════
 params = {
     'weeks': weeks, 'init_store': init_store, 'init_cw': init_cw,
     'init_semi': init_semi, 'init_rawmat': init_rawmat,
@@ -519,12 +751,9 @@ params = {
     'custom_demand': tuple(custom_demand) if custom_demand is not None else None,
 }
 
-
-# ════════════════════════════════════════════════════════════════
-# RUN
-# ════════════════════════════════════════════════════════════════
 states = run_simulation(**params)
-final_kpis = compute_kpis(states[1:], price, var_cost, fixed_pct, base_forecast, weeks, total_init)
+final_kpis = compute_kpis(states[1:], price, var_cost, fixed_pct, base_forecast, weeks,
+                          init_store, init_cw, init_semi, init_rawmat)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -550,32 +779,32 @@ st.markdown("""
 
 
 # ════════════════════════════════════════════════════════════════
-# HEADER + WEEK SELECTOR
+# HEADER
 # ════════════════════════════════════════════════════════════════
 st.markdown("# \U0001f3ed Supply Chain Agility Simulator")
 distrib_mode = "Smart" if smart_distrib else "Push 50/50"
 demand_info = f"Avg {avg_dem:.0f}/wk, peak {peak_val} at W{peak_wk_idx}"
 st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{coverage}**wk \u00b7 Demand: **{demand_info}** \u00b7 Store A: **{store_a_pct}%** / B: **{100-store_a_pct}%** \u00b7 Distrib: **{distrib_mode}***")
 
+
 # ════════════════════════════════════════════════════════════════
 # WEEK NAVIGATION
 # ════════════════════════════════════════════════════════════════
-
 if "week_num" not in st.session_state:
     st.session_state.week_num = 0
 
 b1, b2, b3, b4, info = st.columns([1, 1, 1, 1, 2])
 with b1:
-    if st.button("⏮ W0", use_container_width=True, disabled=st.session_state.week_num == 0):
+    if st.button("\u23ee W0", use_container_width=True, disabled=st.session_state.week_num == 0):
         st.session_state.week_num = 0
 with b2:
-    if st.button("◀ −1", use_container_width=True, disabled=st.session_state.week_num == 0):
+    if st.button("\u25c0 \u22121", use_container_width=True, disabled=st.session_state.week_num == 0):
         st.session_state.week_num -= 1
 with b3:
-    if st.button("+1 ▶", use_container_width=True, disabled=st.session_state.week_num >= weeks):
+    if st.button("+1 \u25b6", use_container_width=True, disabled=st.session_state.week_num >= weeks):
         st.session_state.week_num += 1
 with b4:
-    if st.button(f"W{weeks} ⏭", use_container_width=True, disabled=st.session_state.week_num >= weeks):
+    if st.button(f"W{weeks} \u23ed", use_container_width=True, disabled=st.session_state.week_num >= weeks):
         st.session_state.week_num = weeks
 with info:
     pct = st.session_state.week_num / max(weeks, 1)
@@ -590,7 +819,8 @@ with info:
 
 week = st.session_state.week_num
 state = states[week]
-cum = cumulative_kpis(states[1:], week, price, var_cost, fixed_pct, base_forecast, weeks, total_init)
+cum = cumulative_kpis(states[1:], week, price, var_cost, fixed_pct, base_forecast, weeks,
+                      init_store, init_cw, init_semi, init_rawmat)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -599,7 +829,7 @@ cum = cumulative_kpis(states[1:], week, price, var_cost, fixed_pct, base_forecas
 def kpi_card(label, value, color="#1a2a40"):
     return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value" style="color:{color};">{value}</div></div>'
 
-k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
+k1, k2, k3, k4, k5, k6, k7, k8 = st.columns(8)
 with k1:
     svc = cum['svc_level']
     c = "#c0392b" if svc < 0.6 else ("#d4850a" if svc < 0.85 else "#1a8a4a")
@@ -618,6 +848,10 @@ with k6:
 with k7:
     sc = "#c0392b" if cum['stockout_wks'] > 0 else "#1a8a4a"
     st.markdown(kpi_card("Stockout Wks", f"{cum['stockout_wks']}/{week}", sc), unsafe_allow_html=True)
+with k8:
+    uf = final_kpis['useful_pct']
+    uc = "#1a8a4a" if uf > 80 else ("#d4850a" if uf > 50 else "#c0392b")
+    st.markdown(kpi_card("Useful Prod.", f"{uf:.0f}%", uc), unsafe_allow_html=True)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -632,7 +866,7 @@ st.components.v1.html(make_sc_html(state, params), height=440, scrolling=False)
 # ════════════════════════════════════════════════════════════════
 import altair as alt
 
-st.markdown("#### 📈 Demand vs Sales vs Missed")
+st.markdown("#### \U0001f4c8 Demand vs Sales vs Missed")
 dem_chart_data = pd.DataFrame({
     "Week": list(range(1, weeks + 1)),
     "Demand": [states[i]["demand"] for i in range(1, weeks + 1)],
@@ -640,11 +874,9 @@ dem_chart_data = pd.DataFrame({
     "Missed": [states[i]["missed"] for i in range(1, weeks + 1)],
 })
 
-# Shared Y scale
 y_max = max(dem_chart_data["Demand"].max(), 1) * 1.15
 y_scale = alt.Scale(domain=[0, y_max])
 
-# Stacked bars: Sales (green) + Missed (red) on top
 bar_data = dem_chart_data.melt("Week", ["Sales", "Missed"], var_name="Type", value_name="Units")
 stacked_bars = alt.Chart(bar_data).mark_bar(
     cornerRadiusTopLeft=3, cornerRadiusTopRight=3
@@ -654,21 +886,16 @@ stacked_bars = alt.Chart(bar_data).mark_bar(
     color=alt.Color("Type:N",
         scale=alt.Scale(domain=["Sales", "Missed"], range=["#1a8a4a", "#c0392b"]),
         legend=alt.Legend(orient="top", title=None)),
-    order=alt.Order("Type:N", sort="descending"),  # Sales at bottom, Missed on top
+    order=alt.Order("Type:N", sort="descending"),
 )
 
-# Demand line on top
 demand_line = alt.Chart(dem_chart_data).mark_line(
     color="#4a90d9", strokeWidth=3, strokeDash=[6, 3],
-).encode(
-    x=alt.X("Week:O"),
-    y=alt.Y("Demand:Q", scale=y_scale),
-)
+).encode(x=alt.X("Week:O"), y=alt.Y("Demand:Q", scale=y_scale))
 demand_dots = alt.Chart(dem_chart_data).mark_circle(
     color="#4a90d9", size=40,
 ).encode(x="Week:O", y=alt.Y("Demand:Q", scale=y_scale))
 
-# Current week rule
 rule_dc = alt.Chart(pd.DataFrame({"Week": [week]})).mark_rule(
     color="#d4850a", strokeWidth=2, strokeDash=[4, 2]
 ).encode(x="Week:O")
@@ -677,12 +904,12 @@ st.altair_chart(
     (stacked_bars + demand_line + demand_dots + rule_dc).properties(height=300),
     use_container_width=True,
 )
-st.caption("- - - Demand (blue line) | 🟢 Sales (green bars) | 🔴 Missed (red bars, stacked) | 🟠 Current week")
+st.caption("- - - Demand (blue line) | \U0001f7e2 Sales (green bars) | \U0001f534 Missed (red bars, stacked) | \U0001f7e0 Current week")
+
 
 # ════════════════════════════════════════════════════════════════
 # CHARTS
 # ════════════════════════════════════════════════════════════════
-
 ch1, ch2 = st.columns(2)
 
 with ch1:
@@ -745,6 +972,7 @@ with ch2:
 with st.expander("\U0001f4cb Full Simulation Summary", expanded=False):
     fk = final_kpis
     def r10(v): return round(v, -1)
+
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.metric("Total Demand", f"{r10(fk['total_demand']):,.0f}")
@@ -758,11 +986,28 @@ with st.expander("\U0001f4cb Full Simulation Summary", expanded=False):
         st.metric("Revenue", f"\u20ac{fk['revenue']:,.0f}")
         st.metric("Gross Margin", f"\u20ac{fk['gm']:,.0f}")
         st.metric("Variable Costs", f"\u20ac{fk['var_cost']:,.0f}")
-        st.caption(f"incl. init stock: \u20ac{fk['init_stock_cost']:,.0f}")
+        st.caption(f"Init stock value: \u20ac{fk['init_stock_value']:,.0f} (valorized)")
     with c4:
         st.metric("Fixed Costs", f"\u20ac{fk['fixed']:,.0f}")
         st.metric("Net Margin", f"\u20ac{fk['margin']:,.0f}")
         st.metric("Margin %", f"{fk['margin_pct']*100:.1f}%")
+
+    # Useful vs Useless production
+    st.markdown("---")
+    st.markdown("#### \U0001f3ed Production Efficiency")
+    u1, u2, u3, u4 = st.columns(4)
+    with u1:
+        st.metric("Total System Units", f"{fk['total_system_units']:,.0f}")
+        st.caption("Sold + remaining in system")
+    with u2:
+        st.metric("\u2705 Useful (Sold)", f"{fk['useful_units']:,.0f}")
+        st.caption(f"**{fk['useful_pct']:.1f}%** of total")
+    with u3:
+        st.metric("\u274c Useless (Unsold)", f"{fk['useless_units']:,.0f}")
+        st.caption(f"**{fk['useless_pct']:.1f}%** of total")
+    with u4:
+        st.metric("End Stock Value", f"\u20ac{fk['end_stock_value']:,.0f}")
+        st.caption(f"Stores: {fk['store_end']:.0f} + Pipeline: {fk['end_pipe_units']:.0f}")
 
 with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
     table_data = [{
@@ -781,7 +1026,7 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
 
 with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
     now_str = datetime.now().strftime("%H:%M:%S")
-    scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{init_store}st_A{store_a_pct}_{'smart' if smart_distrib else 'push'}_{now_str}")
+    scenario_name = st.text_input("Scenario Name", f"SC_{order_freq}wk_{total_stock}st_A{store_a_pct}_{'smart' if smart_distrib else 'push'}_{now_str}")
     if st.button("Save Current Scenario"):
         if 'saved_scenarios' not in st.session_state:
             st.session_state.saved_scenarios = {}
@@ -809,18 +1054,15 @@ with st.expander("\U0001f4be Save Scenario for Comparison", expanded=False):
                 'Margin': f"\u20ac{k['margin']:,.0f}",
                 'Margin %': f"{k['margin_pct']*100:.1f}%",
                 '\u0394 vs Base': delta_str,
-                'StoreA%': f"{p['store_a_pct']}%",
+                'Useful%': f"{k['useful_pct']:.0f}%",
+                'Useless%': f"{k['useless_pct']:.0f}%",
                 'Distrib': 'Smart' if p.get('smart_distrib', False) else 'Push',
-                'Store Init': p['init_store'],
-                'Whouse': p['init_cw'], 'Semi': p['init_semi'], 'RM': p['init_rawmat'],
+                'Stock': p['init_store'] + p['init_cw'] + p['init_semi'] + p['init_rawmat'],
                 'Freq': f"{p['order_freq']}wk",
                 'Mat LT': p['mat_lt'], 'Semi LT': p['semi_lt'],
                 'FP LT': p['fp_lt'], 'Dist LT': p['dist_lt'],
-                'Fcst': p['base_forecast'], 'Mult': f"{p['demand_mult']}x",
-                'Ramp': f"W{p['ramp_start']}-{p['ramp_end']}",
-                'Cap': p['cap_start'], 'Ramp%': f"{p['cap_ramp']*100:.0f}%",
+                'Cap': p['cap_start'],
                 'Price': f"\u20ac{p['price']}", 'VarC': f"\u20ac{p['var_cost']}",
-                'Fix%': f"{p['fixed_pct']*100:.0f}%", 'Wks': p['weeks'],
             })
         st.dataframe(pd.DataFrame(comp), use_container_width=True)
         if st.button("Clear All"):
