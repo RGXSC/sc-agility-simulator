@@ -111,9 +111,9 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
     cw = float(init_cw)
 
     pb = 0.0
-    pc = float(cap_start); ps = False; pn = 0
-    sc_ = float(cap_start); ss_ = False; sn = 0
-    fpc = float(cap_start); fps_ = False; fn = 0
+    pn = 0; pc = float(cap_start)
+    sn = 0; sc_ = float(cap_start)
+    fn = 0; fpc = float(cap_start)
     co = 0.0; cas = 0.0
 
     ow = list(range(order_freq, weeks + 1, order_freq)) if order_freq > 1 else list(range(1, weeks + 1))
@@ -192,36 +192,33 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             'store_before': round(avail_a + avail_b, 1),
         })
 
-        # 4. Supplier — linear ramp
+        # 4. Supplier — linear ramp (monotonic: never resets)
+        pn += 1; pc = min(cap_start * (1 + pn * cap_ramp), cap_start * 10)
         if pb > 0.01:
-            if not ps: ps = True; pn = 0; pc = float(cap_start)
-            else: pn += 1; pc = min(cap_start * (1 + pn * cap_ramp), cap_start * 10)
             shipped = math.ceil(min(pb, pc)); pb -= shipped
         else:
-            shipped = 0.0; ps = False; pn = 0; pc = float(cap_start)
+            shipped = 0.0
         s['supplier_shipped'] = round(shipped, 1); s['supplier_cap'] = round(pc, 0)
 
         # 5. Raw mat receives
         raw_mat += m_arr; s['raw_mat_before_prod'] = round(raw_mat, 1)
         semi += sm_arr; cw += fp_arr
 
-        # 6. Semi input — linear ramp
+        # 6. Semi input — linear ramp (monotonic: never resets)
+        sn += 1; sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
         if raw_mat > 0.01:
-            if not ss_: ss_ = True; sn = 0; sc_ = float(cap_start)
-            else: sn += 1; sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
             si = math.ceil(min(raw_mat, sc_)); raw_mat -= si
         else:
-            si = 0.0; ss_ = False; sn = 0; sc_ = float(cap_start)
+            si = 0.0
         s['semi_input'] = round(si, 1); s['semi_cap'] = round(sc_, 0)
         s['raw_mat_stock'] = round(raw_mat, 1)
 
-        # 7. FP input — linear ramp
+        # 7. FP input — linear ramp (monotonic: never resets)
+        fn += 1; fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
         if semi > 0.01:
-            if not fps_: fps_ = True; fn = 0; fpc = float(cap_start)
-            else: fn += 1; fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
             fi = math.ceil(min(semi, fpc)); semi -= fi
         else:
-            fi = 0.0; fps_ = False; fn = 0; fpc = float(cap_start)
+            fi = 0.0
         s['fp_input'] = round(fi, 1); s['fp_cap'] = round(fpc, 0)
         s['semi_stock'] = round(semi, 1)
 
@@ -519,14 +516,11 @@ with st.sidebar:
     # ── 2. PLANNING ─────────────────────────────────────────────
     st.markdown("### \U0001f4cb Planning")
     order_freq = st.slider("Order / Replenishment Frequency (weeks)", min_value=1, max_value=4, step=1, key="order_freq")
+    base_forecast = st.number_input("Base Forecast (pcs/wk)", min_value=0, max_value=1000, step=10, key="base_forecast")
     coverage = phys_lt + order_freq
     st.caption(f"Coverage target: **{coverage}** weeks (LT {phys_lt} + freq {order_freq})")
 
-    # ── 3. DEMAND (base forecast needed for stock recommendation) ─
-    st.markdown("### \U0001f4c8 Demand Profile")
-    base_forecast = st.number_input("Base Forecast (pcs/wk)", min_value=0, max_value=1000, step=10, key="base_forecast")
-
-    # ── 4. INITIAL STOCK (with recommendation) ──────────────────
+    # ── 3. INITIAL STOCK (with recommendation) ──────────────────
     st.markdown("### \U0001f4e6 Initial Stock")
 
     recommended_stock = base_forecast * coverage
@@ -583,7 +577,7 @@ with st.sidebar:
 
     total_init = total_stock
 
-    # ── 5. STORE DEMAND SPLIT ───────────────────────────────────
+    # ── 4. STORE DEMAND SPLIT ───────────────────────────────────
     st.markdown("### \U0001f3ea Store Demand Split")
     store_a_pct = st.slider("Store A demand (%)", 0, 100, 50, 5)
     smart_distrib = st.toggle("Smart Distribution (need-based)", value=False)
@@ -592,7 +586,8 @@ with st.sidebar:
     else:
         st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Warehouse allocates 50/50 (push)")
 
-    # ── 6. DEMAND CURVE ─────────────────────────────────────────
+    # ── 5. DEMAND PROFILE ────────────────────────────────────────
+    st.markdown("### \U0001f4c8 Demand Profile")
     custom_demand = None
     demand_mult = 1.0; ramp_start = 1; ramp_end = 1
 
@@ -668,14 +663,14 @@ with st.sidebar:
     peak_wk_idx = custom_demand[1:].index(peak_val) + 1 if peak_val > 0 else 0
     st.caption(f"Total: **{total_dem:,}** pcs \u00b7 Avg: **{avg_dem:.0f}**/wk \u00b7 Peak: **{peak_val}** at W{peak_wk_idx}")
 
-    # ── 7. CAPACITY ─────────────────────────────────────────────
+    # ── 6. CAPACITY ─────────────────────────────────────────────
     st.markdown("### \U0001f3ed Capacity")
     cap_start = st.number_input("Starting Capacity (pcs/wk)", 10, 1000, 100)
     cap_ramp = st.slider("Ramp-up (%/week, linear)", 0, 50, 20) / 100
     ex_caps = [int(cap_start * (1 + i * cap_ramp)) for i in range(5)]
     st.caption(f"Linear ramp: {' \u2192 '.join(str(c) for c in ex_caps)} ... (based on W1)")
 
-    # ── 8. ECONOMICS ────────────────────────────────────────────
+    # ── 7. ECONOMICS ────────────────────────────────────────────
     st.markdown("### \U0001f4b0 Economics")
     price = st.number_input("Selling Price (\u20ac)", 100, 10000, 1000, 100)
     var_cost = st.number_input("Variable Cost / Finished Product (\u20ac)", 10, 5000, 200, 10)
@@ -688,7 +683,7 @@ with st.sidebar:
     )
     fixed_pct = st.slider("Fixed Cost (% annual fcst rev)", 0, 100, 45) / 100
 
-    # ── 9. QUICK SCENARIOS (3×3 grid) ──────────────────────────
+    # ── 8. QUICK SCENARIOS (3×3 grid) ──────────────────────────
     st.markdown("---")
     st.markdown("### \U0001f3af Quick Scenarios")
     st.caption("3 Lead Time \u00d7 3 Demand \u2014 click to load:")
@@ -719,41 +714,23 @@ with st.sidebar:
     # Row: Agile (LT=8, freq=1)
     a1, a2, a3, a4 = st.columns([1.2, 1, 1, 1])
     with a1: st.markdown("\U0001f7e2 **Agile**\n\n*LT=8, f=1*")
-    with a2:
-        if st.button("\u26a1 Flat", key="p_af", use_container_width=True):
-            apply_preset("Agile", "Flat 100"); st.rerun()
-    with a3:
-        if st.button("\u26a1 Growth", key="p_ag", use_container_width=True):
-            apply_preset("Agile", "Growth \u2192300"); st.rerun()
-    with a4:
-        if st.button("\u26a1 Drop", key="p_ad", use_container_width=True):
-            apply_preset("Agile", "Drop \u219240"); st.rerun()
+    with a2: st.button("\u26a1 Flat", key="p_af", use_container_width=True, on_click=apply_preset, args=("Agile", "Flat 100"))
+    with a3: st.button("\u26a1 Growth", key="p_ag", use_container_width=True, on_click=apply_preset, args=("Agile", "Growth \u2192300"))
+    with a4: st.button("\u26a1 Drop", key="p_ad", use_container_width=True, on_click=apply_preset, args=("Agile", "Drop \u219240"))
 
     # Row: Medium (LT=16, freq=2)
     m1, m2, m3, m4 = st.columns([1.2, 1, 1, 1])
     with m1: st.markdown("\U0001f7e1 **Medium**\n\n*LT=16, f=2*")
-    with m2:
-        if st.button("\U0001f536 Flat", key="p_mf", use_container_width=True):
-            apply_preset("Medium", "Flat 100"); st.rerun()
-    with m3:
-        if st.button("\U0001f536 Growth", key="p_mg", use_container_width=True):
-            apply_preset("Medium", "Growth \u2192300"); st.rerun()
-    with m4:
-        if st.button("\U0001f536 Drop", key="p_md", use_container_width=True):
-            apply_preset("Medium", "Drop \u219240"); st.rerun()
+    with m2: st.button("\U0001f536 Flat", key="p_mf", use_container_width=True, on_click=apply_preset, args=("Medium", "Flat 100"))
+    with m3: st.button("\U0001f536 Growth", key="p_mg", use_container_width=True, on_click=apply_preset, args=("Medium", "Growth \u2192300"))
+    with m4: st.button("\U0001f536 Drop", key="p_md", use_container_width=True, on_click=apply_preset, args=("Medium", "Drop \u219240"))
 
     # Row: Push (LT=24, freq=4)
     p1, p2, p3, p4 = st.columns([1.2, 1, 1, 1])
     with p1: st.markdown("\U0001f534 **Push**\n\n*LT=24, f=4*")
-    with p2:
-        if st.button("\U0001f9f1 Flat", key="p_pf", use_container_width=True):
-            apply_preset("Push", "Flat 100"); st.rerun()
-    with p3:
-        if st.button("\U0001f9f1 Growth", key="p_pg", use_container_width=True):
-            apply_preset("Push", "Growth \u2192300"); st.rerun()
-    with p4:
-        if st.button("\U0001f9f1 Drop", key="p_pd", use_container_width=True):
-            apply_preset("Push", "Drop \u219240"); st.rerun()
+    with p2: st.button("\U0001f9f1 Flat", key="p_pf", use_container_width=True, on_click=apply_preset, args=("Push", "Flat 100"))
+    with p3: st.button("\U0001f9f1 Growth", key="p_pg", use_container_width=True, on_click=apply_preset, args=("Push", "Growth \u2192300"))
+    with p4: st.button("\U0001f9f1 Drop", key="p_pd", use_container_width=True, on_click=apply_preset, args=("Push", "Drop \u219240"))
 
     # Apply preset demand if just clicked
     if "_preset_demand" in st.session_state:
