@@ -816,7 +816,7 @@ st.markdown("""
 st.markdown("# \U0001f3ed Supply Chain Agility Simulator")
 distrib_mode = "Smart" if smart_distrib else "Push 50/50"
 demand_info = f"Avg {avg_dem:.0f}/wk, peak {peak_val} at W{peak_wk_idx}"
-st.markdown(f"*Luxury Industry \u00b7 LT = **{phys_lt}**wk \u00b7 Coverage = **{coverage}**wk \u00b7 Demand: **{demand_info}** \u00b7 Store A: **{store_a_pct}%** / B: **{100-store_a_pct}%** \u00b7 Distrib: **{distrib_mode}***")
+st.markdown(f"LT = **{phys_lt}**wk \u00b7 Coverage = **{coverage}**wk \u00b7 Demand: **{demand_info}** \u00b7 Store A: **{store_a_pct}%** / B: **{100-store_a_pct}%** \u00b7 Distrib: **{distrib_mode}***")
 
 
 # ════════════════════════════════════════════════════════════════
