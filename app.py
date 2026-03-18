@@ -15,7 +15,15 @@ _DEFAULTS = {
     "total_stock": 1500,
     "store_pct": 60, "wh_pct": 20, "semi_pct": 10,
     "store_a_pct": 50, "smart_distrib": False,
+    "demand_shape": "\u27a1\ufe0f Flat (constant demand)",
 }
+
+DEMAND_SHAPES = [
+    "\u27a1\ufe0f Flat (constant demand)",
+    "\U0001f4c8 Linear ramp then flat",
+    "\U0001f4c9 Linear drop then flat",
+    "\U0001f514 Poisson curve (launch peak)",
+]
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -31,32 +39,6 @@ LT_PROFILES = {
     "Push":   {"mat_lt": 12, "semi_lt": 6, "fp_lt": 3, "dist_lt": 3, "order_freq": 4},
 }
 
-def make_demand_flat(weeks, base=100):
-    return [0] + [base] * weeks
-
-def make_demand_growth(weeks, base=100, target=300, ramp_weeks=5):
-    d = [0]
-    for w in range(1, weeks + 1):
-        if w <= ramp_weeks:
-            d.append(int(round(base + (target - base) * w / ramp_weeks)))
-        else:
-            d.append(target)
-    return d
-
-def make_demand_drop(weeks, base=100, target=40, drop_weeks=1):
-    d = [0]
-    for w in range(1, weeks + 1):
-        if w <= drop_weeks:
-            d.append(int(round(base + (target - base) * w / drop_weeks)))
-        else:
-            d.append(target)
-    return d
-
-DEMAND_PROFILES = {
-    "Flat 100":    lambda wks: make_demand_flat(wks, 100),
-    "Growth \u2192300": lambda wks: make_demand_growth(wks, 100, 300, 5),
-    "Drop \u219240":    lambda wks: make_demand_drop(wks, 100, 40, 1),
-}
 
 # ════════════════════════════════════════════════════════════════
 # VALORIZATION CONSTANTS
@@ -647,20 +629,19 @@ with st.sidebar:
     demand_description = ""  # point 4: for saving
 
     bf = base_forecast
-    preset_shape = st.selectbox("Demand shape", [
-        "\u27a1\ufe0f Flat (constant demand)",
-        "\U0001f4c8 Linear ramp then flat",
-        "\U0001f4c9 Linear drop then flat",
-        "\U0001f514 Poisson curve (launch peak)",
-    ])
+    preset_shape = st.selectbox("Demand shape", DEMAND_SHAPES, key="demand_shape")
 
     if "Flat" in preset_shape:
         init_demand = [0] + [bf] * weeks
         demand_description = f"Flat {bf}/wk for {weeks} wks"
 
     elif "Linear ramp" in preset_shape:
-        end_dem = st.slider("Target demand (pcs/wk)", bf, 1000, min(bf * 3, 1000), 10, key="lr_end")
-        ramp_wks = st.slider("Ramp duration (weeks)", 1, weeks, min(weeks // 3, 8), key="lr_wks")
+        if "lr_end" not in st.session_state:
+            st.session_state["lr_end"] = min(bf * 3, 1000)
+        if "lr_wks" not in st.session_state:
+            st.session_state["lr_wks"] = min(weeks // 3, 8)
+        end_dem = st.slider("Target demand (pcs/wk)", min_value=bf, max_value=1000, step=10, key="lr_end")
+        ramp_wks = st.slider("Ramp duration (weeks)", min_value=1, max_value=weeks, step=1, key="lr_wks")
         init_demand = [0]
         for w in range(1, weeks + 1):
             if w <= ramp_wks:
@@ -671,8 +652,12 @@ with st.sidebar:
         demand_description = f"Ramp {bf}\u2192{end_dem} in {ramp_wks}wk"
 
     elif "Linear drop" in preset_shape:
-        drop_dem = st.slider("Floor demand (pcs/wk)", 0, bf, max(0, bf // 3), 10, key="ld_end")
-        drop_wks = st.slider("Drop duration (weeks)", 1, weeks, 1, key="ld_wks")
+        if "ld_end" not in st.session_state:
+            st.session_state["ld_end"] = max(0, bf // 3)
+        if "ld_wks" not in st.session_state:
+            st.session_state["ld_wks"] = 1
+        drop_dem = st.slider("Floor demand (pcs/wk)", min_value=0, max_value=bf, step=10, key="ld_end")
+        drop_wks = st.slider("Drop duration (weeks)", min_value=1, max_value=weeks, step=1, key="ld_wks")
         init_demand = [0]
         for w in range(1, weeks + 1):
             if w <= drop_wks:
@@ -683,9 +668,15 @@ with st.sidebar:
         demand_description = f"Drop {bf}\u2192{drop_dem} in {drop_wks}wk"
 
     else:  # Poisson
-        peak_wk = st.slider("Peak week", 1, weeks, min(weeks // 3, 8), key="pk_wk")
-        peak_h = st.slider("Peak demand (pcs/wk)", bf, 1000, min(bf * 4, 1000), 10, key="pk_h")
-        spread = st.slider("Spread (weeks)", 1.0, float(max(2, weeks // 2)), 4.0, 0.5, key="pk_sp")
+        if "pk_wk" not in st.session_state:
+            st.session_state["pk_wk"] = min(weeks // 3, 8)
+        if "pk_h" not in st.session_state:
+            st.session_state["pk_h"] = min(bf * 4, 1000)
+        if "pk_sp" not in st.session_state:
+            st.session_state["pk_sp"] = 4.0
+        peak_wk = st.slider("Peak week", min_value=1, max_value=weeks, step=1, key="pk_wk")
+        peak_h = st.slider("Peak demand (pcs/wk)", min_value=bf, max_value=1000, step=10, key="pk_h")
+        spread = st.slider("Spread (weeks)", min_value=1.0, max_value=float(max(2, weeks // 2)), step=0.5, key="pk_sp")
         init_demand = [0]
         for w in range(1, weeks + 1):
             val = peak_h * np.exp(-0.5 * ((w - peak_wk) / spread) ** 2) + bf * 0.05
@@ -766,7 +757,17 @@ with st.sidebar:
             st.session_state["store_pct"] = 60
             st.session_state["wh_pct"] = 20
             st.session_state["semi_pct"] = 10
-        st.session_state["_preset_demand"] = dem_name
+        # Set demand shape selectbox + slider values directly
+        if "Flat" in dem_name:
+            st.session_state["demand_shape"] = DEMAND_SHAPES[0]  # Flat
+        elif "Growth" in dem_name:
+            st.session_state["demand_shape"] = DEMAND_SHAPES[1]  # Linear ramp
+            st.session_state["lr_end"] = 300
+            st.session_state["lr_wks"] = 5
+        elif "Drop" in dem_name:
+            st.session_state["demand_shape"] = DEMAND_SHAPES[2]  # Linear drop
+            st.session_state["ld_end"] = 40
+            st.session_state["ld_wks"] = 1
 
     h1, h2, h3, h4 = st.columns([1.2, 1, 1, 1])
     with h2: st.markdown("**Flat**")
@@ -796,11 +797,6 @@ with st.sidebar:
         "\U0001f7e2 Agile: 60/20/10/10 | "
         "\U0001f7e1 Medium: 80/20 | "
         "\U0001f534 Push: 100% store")
-
-    if "_preset_demand" in st.session_state:
-        dem_key = st.session_state.pop("_preset_demand")
-        if dem_key in DEMAND_PROFILES:
-            custom_demand = DEMAND_PROFILES[dem_key](weeks)
 
 
 # ════════════════════════════════════════════════════════════════
