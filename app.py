@@ -170,6 +170,9 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         m_arr = mat_pipe[0]; sm_arr = semi_pipe[0]; fp_arr = fp_pipe[0]
         da_arr = dist_pipe_a[0]; db_arr = dist_pipe_b[0]
         d_arr_total = da_arr + db_arr
+        # Clear fronts — these units have arrived, no longer in transit
+        mat_pipe[0] = 0.0; semi_pipe[0] = 0.0; fp_pipe[0] = 0.0
+        dist_pipe_a[0] = 0.0; dist_pipe_b[0] = 0.0
         s['mat_arr'] = round(m_arr, 1); s['semi_arr'] = round(sm_arr, 1)
         s['fp_arr'] = round(fp_arr, 1)
         s['dist_arr_a'] = round(da_arr, 1); s['dist_arr_b'] = round(db_arr, 1)
