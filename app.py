@@ -246,27 +246,27 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         # Incremental cost: Semi→FP = 25% of var_cost (from 75% to 100%)
         s['cost_fp'] = round(fi * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
 
-        # 8. CW — PUSH TO STORES BASED ON FORECAST (point 9)
-        downstream_from_cw = sum(dist_pipe_a) + sum(dist_pipe_b) + store_total
-        target_cw = ff * lt_from_cw
-        need_cw = max(0, target_cw - downstream_from_cw)
+        # 8. CW — PUSH TO STORES BASED ON FORECAST, PER STORE
+        # Always calculate per-store need (prevents masking)
+        target_a = ff * pct_a * lt_from_cw
+        target_b = ff * pct_b * lt_from_cw
+        downstream_a = sum(dist_pipe_a) + store_a
+        downstream_b = sum(dist_pipe_b) + store_b
+        need_a_cw = max(0, target_a - downstream_a)
+        need_b_cw = max(0, target_b - downstream_b)
+        need_cw = need_a_cw + need_b_cw
         ship_out = min(math.ceil(cw), math.ceil(need_cw)) if cw > 0.01 and need_cw > 0.5 else 0.0
         cw -= ship_out
         s['cw_shipped'] = round(ship_out, 1); s['cw_stock'] = round(cw, 1)
 
-        if smart_distrib and ship_out > 0:
-            need_a = max(0, ff * pct_a * dist_lt - store_a)
-            need_b = max(0, ff * pct_b * dist_lt - store_b)
-            total_need = need_a + need_b
-            if total_need > 0.01:
-                alloc_a = round(ship_out * (need_a / total_need))
+        # Allocate: Smart = proportional to need; Push = 50/50 blind
+        if ship_out > 0:
+            if smart_distrib and need_cw > 0.01:
+                alloc_a = round(ship_out * (need_a_cw / need_cw))
                 alloc_b = ship_out - alloc_a
             else:
-                alloc_a = round(ship_out * pct_a)
+                alloc_a = round(ship_out * 0.5)
                 alloc_b = ship_out - alloc_a
-        elif ship_out > 0:
-            alloc_a = round(ship_out * 0.5)
-            alloc_b = ship_out - alloc_a
         else:
             alloc_a = 0; alloc_b = 0
         s['alloc_a'] = round(alloc_a, 1); s['alloc_b'] = round(alloc_b, 1)
@@ -918,7 +918,7 @@ st.components.v1.html(make_sc_html(state, params), height=440, scrolling=False)
 # ════════════════════════════════════════════════════════════════
 import altair as alt
 
-with st.expander("\U0001f4c8 Demand vs Sales vs Missed (chart)", expanded=False):
+with st.expander("\U0001f4c8 Charts: Demand, Fulfillment, Stocks", expanded=False):
     dem_chart_data = pd.DataFrame({
         "Week": list(range(1, weeks + 1)),
         "Demand": [states[i]["demand"] for i in range(1, weeks + 1)],
@@ -943,48 +943,48 @@ with st.expander("\U0001f4c8 Demand vs Sales vs Missed (chart)", expanded=False)
         x="Week:O", y=alt.Y("Demand:Q", scale=y_scale))
     rule_dc = alt.Chart(pd.DataFrame({"Week": [week]})).mark_rule(
         color="#d4850a", strokeWidth=2, strokeDash=[4,2]).encode(x="Week:O")
+
+    st.markdown("#### Demand vs Sales vs Missed")
     st.altair_chart((stacked_bars + demand_line + demand_dots + rule_dc).properties(height=300), use_container_width=True)
 
-# ════════════════════════════════════════════════════════════════
-# STORE CHARTS
-# ════════════════════════════════════════════════════════════════
-ch1, ch2 = st.columns(2)
-with ch1:
-    st.markdown("#### Demand vs Fulfillment (per store)")
-    rows = []
-    for s in states[1:]:
-        rows.append({'Week': s['week'], 'Group': 'Fill A', 'Component': 'Sales A', 'Value': s['sales_a']})
-        rows.append({'Week': s['week'], 'Group': 'Fill A', 'Component': 'Lost A', 'Value': s['missed_a']})
-        rows.append({'Week': s['week'], 'Group': 'Fill B', 'Component': 'Sales B', 'Value': s['sales_b']})
-        rows.append({'Week': s['week'], 'Group': 'Fill B', 'Component': 'Lost B', 'Value': s['missed_b']})
-    df_bars = pd.DataFrame(rows)
-    bars = alt.Chart(df_bars).mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2).encode(
-        x=alt.X('Week:O'), y=alt.Y('Value:Q', title='Units', stack=True),
-        color=alt.Color('Component:N',
-            scale=alt.Scale(domain=['Sales A','Lost A','Sales B','Lost B'],
-                            range=['#2c5f8a','#c0392b','#6a3d9a','#e74c8c']),
-            legend=alt.Legend(orient='top', title=None, columns=2)),
-        xOffset='Group:N',
-    ).properties(height=260)
-    rule = alt.Chart(pd.DataFrame({'Week': [week]})).mark_rule(color='#d4850a', strokeWidth=2, strokeDash=[4,2]).encode(x='Week:O')
-    st.altair_chart(bars + rule, use_container_width=True)
+    # Store-level charts
+    ch1, ch2 = st.columns(2)
+    with ch1:
+        st.markdown("#### Demand vs Fulfillment (per store)")
+        rows = []
+        for s in states[1:]:
+            rows.append({'Week': s['week'], 'Group': 'Fill A', 'Component': 'Sales A', 'Value': s['sales_a']})
+            rows.append({'Week': s['week'], 'Group': 'Fill A', 'Component': 'Lost A', 'Value': s['missed_a']})
+            rows.append({'Week': s['week'], 'Group': 'Fill B', 'Component': 'Sales B', 'Value': s['sales_b']})
+            rows.append({'Week': s['week'], 'Group': 'Fill B', 'Component': 'Lost B', 'Value': s['missed_b']})
+        df_bars = pd.DataFrame(rows)
+        bars = alt.Chart(df_bars).mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2).encode(
+            x=alt.X('Week:O'), y=alt.Y('Value:Q', title='Units', stack=True),
+            color=alt.Color('Component:N',
+                scale=alt.Scale(domain=['Sales A','Lost A','Sales B','Lost B'],
+                                range=['#2c5f8a','#c0392b','#6a3d9a','#e74c8c']),
+                legend=alt.Legend(orient='top', title=None, columns=2)),
+            xOffset='Group:N',
+        ).properties(height=260)
+        rule = alt.Chart(pd.DataFrame({'Week': [week]})).mark_rule(color='#d4850a', strokeWidth=2, strokeDash=[4,2]).encode(x='Week:O')
+        st.altair_chart(bars + rule, use_container_width=True)
 
-with ch2:
-    st.markdown("#### Store Stocks & Orders")
-    stock_data = pd.DataFrame({
-        'Week': [s['week'] for s in states], 'Store A': [s['store_a'] for s in states],
-        'Store B': [s['store_b'] for s in states], 'Order': [s['order'] for s in states],
-    })
-    melted = stock_data.melt('Week', ['Store A','Store B'], var_name='Store', value_name='Stock')
-    lines = alt.Chart(melted).mark_area(opacity=0.25).encode(
-        x=alt.X('Week:O'), y=alt.Y('Stock:Q', title='Units', stack=False),
-        color=alt.Color('Store:N', scale=alt.Scale(domain=['Store A','Store B'], range=['#2c5f8a','#6a3d9a']),
-            legend=alt.Legend(orient='top', title=None)),
-    ).properties(height=260)
-    order_bars = alt.Chart(stock_data[stock_data['Order'] > 0]).mark_bar(
-        color='#1a8a4a', opacity=0.4, cornerRadiusTopLeft=2, cornerRadiusTopRight=2).encode(x='Week:O', y='Order:Q')
-    rule2 = alt.Chart(pd.DataFrame({'Week': [week]})).mark_rule(color='#d4850a', strokeWidth=2, strokeDash=[4,2]).encode(x='Week:O')
-    st.altair_chart(lines + order_bars + rule2, use_container_width=True)
+    with ch2:
+        st.markdown("#### Store Stocks & Orders")
+        stock_data = pd.DataFrame({
+            'Week': [s['week'] for s in states], 'Store A': [s['store_a'] for s in states],
+            'Store B': [s['store_b'] for s in states], 'Order': [s['order'] for s in states],
+        })
+        melted = stock_data.melt('Week', ['Store A','Store B'], var_name='Store', value_name='Stock')
+        lines = alt.Chart(melted).mark_area(opacity=0.25).encode(
+            x=alt.X('Week:O'), y=alt.Y('Stock:Q', title='Units', stack=False),
+            color=alt.Color('Store:N', scale=alt.Scale(domain=['Store A','Store B'], range=['#2c5f8a','#6a3d9a']),
+                legend=alt.Legend(orient='top', title=None)),
+        ).properties(height=260)
+        order_bars = alt.Chart(stock_data[stock_data['Order'] > 0]).mark_bar(
+            color='#1a8a4a', opacity=0.4, cornerRadiusTopLeft=2, cornerRadiusTopRight=2).encode(x='Week:O', y='Order:Q')
+        rule2 = alt.Chart(pd.DataFrame({'Week': [week]})).mark_rule(color='#d4850a', strokeWidth=2, strokeDash=[4,2]).encode(x='Week:O')
+        st.altair_chart(lines + order_bars + rule2, use_container_width=True)
 
 # ════════════════════════════════════════════════════════════════
 # P&L SUMMARY (point 12: at end, like a proper P&L)
@@ -1036,7 +1036,7 @@ with st.expander("\U0001f4cb P&L Summary (end of simulation)", expanded=False):
             f"{fk['margin_pct']*100:.1f}% of revenue",
         ],
     }
-    st.dataframe(pd.DataFrame(pl_data), use_container_width=True, hide_index=True)
+    st.table(pd.DataFrame(pl_data).set_index("Line"))
 
     # Unsold stock cost breakdown
     st.markdown("---")
