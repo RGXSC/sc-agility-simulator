@@ -214,13 +214,15 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         raw_mat += m_arr; s['raw_mat_before_prod'] = round(raw_mat, 1)
         semi += sm_arr; cw += fp_arr
 
-        # 6. Semi input — PUSH BASED ON FORECAST (point 9)
-        # Target: forecast × (semi_lt + fp_lt + dist_lt) = downstream coverage
-        # Only push what's needed: target - downstream WIP - downstream stock
+        # 6. Semi input — PUSH BASED ON FORECAST, PER-STORE AWARE
         sn += 1; sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
-        downstream_from_semi = sum(semi_pipe) + sum(fp_pipe) + sum(dist_pipe_a) + sum(dist_pipe_b) + cw + store_total
-        target_semi = ff * lt_from_semi
-        need_semi = max(0, target_semi - downstream_from_semi)
+        # Shared pipes (semi, fp, cw) split proportionally; dist pipes are per-store
+        shared_wip = sum(semi_pipe) + sum(fp_pipe) + cw
+        down_a_semi = shared_wip * pct_a + sum(dist_pipe_a) + store_a
+        down_b_semi = shared_wip * pct_b + sum(dist_pipe_b) + store_b
+        need_a_semi = max(0, ff * pct_a * lt_from_semi - down_a_semi)
+        need_b_semi = max(0, ff * pct_b * lt_from_semi - down_b_semi)
+        need_semi = need_a_semi + need_b_semi
         if raw_mat > 0.01 and need_semi > 0.5:
             si = min(math.ceil(min(raw_mat, sc_)), math.ceil(need_semi))
             raw_mat -= si
@@ -228,14 +230,16 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             si = 0.0
         s['semi_input'] = round(si, 1); s['semi_cap'] = round(sc_, 0)
         s['raw_mat_stock'] = round(raw_mat, 1)
-        # Incremental cost: RM→Semi = 25% of var_cost (from 50% to 75%)
         s['cost_semi'] = round(si * var_cost * (VALOR_SEMI - VALOR_RAW_MAT), 1)
 
-        # 7. FP input — PUSH BASED ON FORECAST
+        # 7. FP input — PUSH BASED ON FORECAST, PER-STORE AWARE
         fn += 1; fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
-        downstream_from_fp = sum(fp_pipe) + sum(dist_pipe_a) + sum(dist_pipe_b) + cw + store_total
-        target_fp = ff * lt_from_fp
-        need_fp = max(0, target_fp - downstream_from_fp)
+        shared_wip_fp = sum(fp_pipe) + cw
+        down_a_fp = shared_wip_fp * pct_a + sum(dist_pipe_a) + store_a
+        down_b_fp = shared_wip_fp * pct_b + sum(dist_pipe_b) + store_b
+        need_a_fp = max(0, ff * pct_a * lt_from_fp - down_a_fp)
+        need_b_fp = max(0, ff * pct_b * lt_from_fp - down_b_fp)
+        need_fp = need_a_fp + need_b_fp
         if semi > 0.01 and need_fp > 0.5:
             fi = min(math.ceil(min(semi, fpc)), math.ceil(need_fp))
             semi -= fi
@@ -243,7 +247,6 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             fi = 0.0
         s['fp_input'] = round(fi, 1); s['fp_cap'] = round(fpc, 0)
         s['semi_stock'] = round(semi, 1)
-        # Incremental cost: Semi→FP = 25% of var_cost (from 75% to 100%)
         s['cost_fp'] = round(fi * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
 
         # 8. CW — PUSH TO STORES BASED ON FORECAST, PER STORE
