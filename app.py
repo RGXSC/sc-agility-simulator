@@ -338,7 +338,7 @@ def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks,
 
     rev = ts * price
     gm = rev - vc
-    fx = base_forecast * 52 * price * fixed_pct * (weeks / 52)
+    fx = base_forecast * weeks * price * fixed_pct
     mg = gm - fx
 
     # End stock
@@ -420,7 +420,7 @@ def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, tot
                 + sum(s.get('cost_fp', 0) for s in sub))
     vc = init_stock_value + prod_cost
     rev = ts * price; gm = rev - vc
-    fx = base_forecast * 52 * price * fixed_pct * (week / 52)
+    fx = base_forecast * week * price * fixed_pct
     mg = gm - fx
 
     init_total = init_store + init_cw + init_semi + init_rawmat
@@ -451,17 +451,30 @@ def make_sc_html(state, params):
     def pipe_html(pipe, hue, label):
         n = len(pipe)
         rpipe = list(reversed(pipe))
-        bsize = "28px" if n > 6 else "38px"
+        bsize = "26px" if n > 6 else "38px"
         fsize = "8px" if n > 6 else "10px"
         def box(i):
             sty, txt = pipe_box_style(rpipe[i], hue)
             return f'<div style="width:{bsize};height:{bsize};{sty}border:1px solid hsl({hue},20%,80%);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:{fsize};font-weight:700;">{txt}</div>'
         if n > 6:
-            # Wrap to 2 rows
             mid = (n + 1) // 2
-            row1 = '<div style="display:flex;gap:1px;justify-content:center;">' + "".join(box(i) for i in range(mid)) + '</div>'
-            row2 = '<div style="display:flex;gap:1px;justify-content:center;">' + "".join(box(i) for i in range(mid, n)) + '</div>'
-            inner = f'<div style="display:flex;flex-direction:column;gap:1px;">{row1}{row2}</div>'
+            # Row 1: first half (closest to arrival) with week markers
+            row1_boxes = "".join(box(i) for i in range(mid))
+            row1 = (f'<div style="display:flex;gap:1px;align-items:center;">'
+                    f'<span style="font-size:7px;color:#b0b8c4;margin-right:2px;">wk1</span>'
+                    f'{row1_boxes}'
+                    f'<span style="font-size:7px;color:#b0b8c4;margin-left:2px;">wk{mid}</span>'
+                    f'</div>')
+            # Continuation arrow
+            cont = '<div style="text-align:center;font-size:8px;color:#8a96a6;line-height:1;">&#8627;</div>'
+            # Row 2: second half
+            row2_boxes = "".join(box(i) for i in range(mid, n))
+            row2 = (f'<div style="display:flex;gap:1px;align-items:center;">'
+                    f'<span style="font-size:7px;color:#b0b8c4;margin-right:2px;">wk{mid+1}</span>'
+                    f'{row2_boxes}'
+                    f'<span style="font-size:7px;color:#b0b8c4;margin-left:2px;">wk{n}</span>'
+                    f'</div>')
+            inner = f'<div style="display:flex;flex-direction:column;gap:0px;background:hsl({hue},6%,96%);border-radius:4px;padding:2px 3px;">{row1}{cont}{row2}</div>'
         else:
             inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
         return f'<div style="text-align:center;flex:1 1 auto;"><div style="font-size:8px;color:#8a96a6;margin-bottom:3px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
@@ -735,7 +748,7 @@ with st.sidebar:
         f'Semi: \u20ac{var_cost * VALOR_SEMI:.0f} (75%) | '
         f'Finished: \u20ac{var_cost:.0f} (100%)</div>',
         unsafe_allow_html=True)
-    fixed_pct = st.slider("Fixed Cost (% annual fcst rev)", 0, 100, 45) / 100
+    fixed_pct = st.slider("Fixed Cost (% of sim period fcst rev)", 0, 100, 45) / 100
 
     # 8. QUICK SCENARIOS
     st.markdown("---")
@@ -1043,7 +1056,7 @@ with st.expander("\U0001f4cb P&L Summary (end of simulation)", expanded=False):
             f"Init stock + production costs",
             "",
             f"Revenue - Variable Costs",
-            f"{fixed_pct*100:.0f}% of annual forecast revenue",
+            f"{fixed_pct*100:.0f}% of simulation forecast revenue",
             "",
             f"{fk['margin_pct']*100:.1f}% of revenue",
         ],
