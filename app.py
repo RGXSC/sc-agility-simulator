@@ -59,7 +59,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
                    custom_demand=None):
 
     phys_lt = mat_lt + semi_lt + fp_lt + dist_lt
-    coverage = phys_lt + order_freq
+    coverage = phys_lt + order_freq + 1
     pct_a = store_a_pct / 100.0
     pct_b = 1.0 - pct_a
 
@@ -556,9 +556,9 @@ with st.sidebar:
     st.markdown("### \U0001f4cb Planning")
     order_freq = st.slider("Order / Replenishment Frequency (weeks)", min_value=1, max_value=4, step=1, key="order_freq")
     base_forecast = BASE_FORECAST
-    coverage = phys_lt + order_freq
+    coverage = phys_lt + order_freq + 1
     st.caption(f"Base forecast: **{base_forecast}** pcs/wk (fixed)")
-    st.caption(f"Coverage target: **{coverage}** weeks (LT {phys_lt} + freq {order_freq})")
+    st.caption(f"Coverage target: **{coverage}** weeks (LT {phys_lt} + freq {order_freq} + 1 safety)")
 
     # 3. INITIAL STOCK
     st.markdown("### \U0001f4e6 Initial Stock")
@@ -730,7 +730,7 @@ with st.sidebar:
         st.session_state["dist_lt"] = lt["dist_lt"]
         st.session_state["order_freq"] = lt["order_freq"]
         total_lt = lt["mat_lt"] + lt["semi_lt"] + lt["fp_lt"] + lt["dist_lt"]
-        cov = total_lt + lt["order_freq"]
+        cov = total_lt + lt["order_freq"] + 1
         rec = BASE_FORECAST * cov
         st.session_state["total_stock"] = min(rec, 10000)
         st.session_state["store_a_pct"] = 60
