@@ -226,16 +226,26 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['cw_shipped'] = round(ship_out, 1); s['cw_stock'] = round(cw, 1)
 
         # Allocate: Before first planning review = 50/50 (blind)
-        # After first review: planner discovers demand split → smart allocation
+        # After first review: equalize weeks-of-cover, then split by demand rate
         if ship_out > 0:
             if smart_distrib and smart_discovered:
-                # Smart: full pipeline horizon to equalize weeks-of-cover
-                need_a = max(0, ff * pct_a * phys_lt - sum(dist_pipe_a) - store_a)
-                need_b = max(0, ff * pct_b * phys_lt - sum(dist_pipe_b) - store_b)
-                total_need = need_a + need_b
-                if total_need > 0.01:
-                    alloc_a = round(ship_out * (need_a / total_need))
+                dem_a_wk = max(ff * pct_a, 0.01)
+                dem_b_wk = max(ff * pct_b, 0.01)
+                cover_a = (store_a + sum(dist_pipe_a)) / dem_a_wk
+                cover_b = (store_b + sum(dist_pipe_b)) / dem_b_wk
+                # Priority: fill the worst-covered store first to equalize
+                if cover_a < cover_b:
+                    gap = math.ceil(max(0, (cover_b - cover_a) * dem_a_wk))
+                    priority_a = min(ship_out, gap)
+                    remaining = ship_out - priority_a
+                    alloc_a = priority_a + round(remaining * pct_a)
                     alloc_b = ship_out - alloc_a
+                elif cover_b < cover_a:
+                    gap = math.ceil(max(0, (cover_a - cover_b) * dem_b_wk))
+                    priority_b = min(ship_out, gap)
+                    remaining = ship_out - priority_b
+                    alloc_b = priority_b + round(remaining * pct_b)
+                    alloc_a = ship_out - alloc_b
                 else:
                     alloc_a = round(ship_out * pct_a)
                     alloc_b = ship_out - alloc_a
