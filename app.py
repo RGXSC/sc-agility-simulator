@@ -59,7 +59,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
                    custom_demand=None):
 
     phys_lt = mat_lt + semi_lt + fp_lt + dist_lt
-    coverage = phys_lt + order_freq + 1
+    coverage = phys_lt + order_freq
     pct_a = store_a_pct / 100.0
     pct_b = 1.0 - pct_a
 
@@ -86,9 +86,9 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
     dist_pipe_a = [0.0] * max(1, dist_lt)
     dist_pipe_b = [0.0] * max(1, dist_lt)
 
-    # Initial store stock: split by demand percentage (not 50/50)
-    store_a = float(init_store) * pct_a
-    store_b = float(init_store) * pct_b
+    # Initial store stock: ALWAYS 50/50 (push reality — planner hasn't reviewed yet)
+    store_a = float(init_store) / 2.0
+    store_b = float(init_store) / 2.0
     raw_mat = float(init_rawmat)
     semi = float(init_semi)
     cw = float(init_cw)
@@ -98,6 +98,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
     sn = 0; sc_ = float(cap_start)
     fn = 0; fpc = float(cap_start)
     co = 0.0; cas = 0.0
+    smart_discovered = False  # planner hasn't reviewed yet — CW pushes 50/50
 
     ow = list(range(order_freq, weeks + 1, order_freq)) if order_freq > 1 else list(range(1, weeks + 1))
     states = []
@@ -141,6 +142,8 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         # Between reviews, system is blind to demand changes
         if w in ow:
             ff = float(dem_total)  # update forecast to current demand curve
+            if smart_distrib and not smart_discovered:
+                smart_discovered = True  # planner discovers demand imbalance
         s['demand'] = dem_total; s['demand_a'] = dem_a; s['demand_b'] = dem_b
         s['forecast'] = round(ff, 1)
 
@@ -222,11 +225,13 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         cw -= ship_out
         s['cw_shipped'] = round(ship_out, 1); s['cw_stock'] = round(cw, 1)
 
-        # Allocate: Smart = proportional to per-store need; Push = 50/50
+        # Allocate: Before first planning review = 50/50 (blind)
+        # After first review: planner discovers demand split → smart allocation
         if ship_out > 0:
-            if smart_distrib:
-                need_a = max(0, ff * pct_a * dist_lt - sum(dist_pipe_a) - store_a)
-                need_b = max(0, ff * pct_b * dist_lt - sum(dist_pipe_b) - store_b)
+            if smart_distrib and smart_discovered:
+                # Smart: full pipeline horizon to equalize weeks-of-cover
+                need_a = max(0, ff * pct_a * phys_lt - sum(dist_pipe_a) - store_a)
+                need_b = max(0, ff * pct_b * phys_lt - sum(dist_pipe_b) - store_b)
                 total_need = need_a + need_b
                 if total_need > 0.01:
                     alloc_a = round(ship_out * (need_a / total_need))
@@ -235,6 +240,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
                     alloc_a = round(ship_out * pct_a)
                     alloc_b = ship_out - alloc_a
             else:
+                # Push / not yet discovered: 50/50 blind
                 alloc_a = round(ship_out * 0.5)
                 alloc_b = ship_out - alloc_a
         else:
@@ -285,8 +291,11 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         if shipped > 0.5:
             parts.append(f"Supplier {shipped:.0f}.")
         if ship_out > 0.5:
-            mode = "smart" if smart_distrib else "push 50/50"
-            parts.append(f"WH->A:{alloc_a:.0f} B:{alloc_b:.0f} ({mode}).")
+            if smart_distrib and smart_discovered:
+                mode = "smart"
+            else:
+                mode = "push 50/50"
+            parts.append(f"WH\u2192A:{alloc_a:.0f} B:{alloc_b:.0f} ({mode}).")
         s['comment'] = " ".join(parts)
         states.append(s)
 
@@ -598,7 +607,7 @@ with st.sidebar:
 
     st.markdown(
         f'<div style="background:#f0f2f5;border-radius:8px;padding:8px 12px;font-size:11px;line-height:1.8;">'
-        f'<b>Store:</b> {init_store} ({store_pct}%) @ 100% | '
+        f'<b>Store:</b> {init_store} ({store_pct}%) @ 100% <i>(always 50/50 initial)</i> | '
         f'<b>WH:</b> {init_cw} ({warehouse_pct}%) @ 100% | '
         f'<b>Semi:</b> {init_semi} ({semi_pct}%) @ 75% | '
         f'<b>RM:</b> {init_rawmat} ({rawmat_pct}%) @ 50%</div>',
@@ -609,9 +618,9 @@ with st.sidebar:
     store_a_pct = st.slider("Store A demand (%)", 0, 100, step=5, key="store_a_pct")
     smart_distrib = st.toggle("Smart Distribution (need-based)", key="smart_distrib")
     if smart_distrib:
-        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Allocates by net need")
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Stores start 50/50, CW rebalances at first planning review")
     else:
-        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Push 50/50")
+        st.caption(f"A: **{store_a_pct}%** B: **{100-store_a_pct}%** \u2014 Push 50/50 always")
 
     # 5. DEMAND PROFILE (point 1, 2: correct slider ranges)
     st.markdown("### \U0001f4c8 Demand Profile")
