@@ -63,11 +63,6 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
     pct_a = store_a_pct / 100.0
     pct_b = 1.0 - pct_a
 
-    # Stage-specific remaining lead times (for push targets)
-    lt_from_cw    = dist_lt                         # CW → Store
-    lt_from_fp    = fp_lt + dist_lt                  # FP stage → Store
-    lt_from_semi  = semi_lt + fp_lt + dist_lt        # Semi stage → Store
-    lt_from_mat   = mat_lt + semi_lt + fp_lt + dist_lt  # Supplier → Store
 
     demand = {}
     if custom_demand is not None:
@@ -199,17 +194,10 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         raw_mat += m_arr; s['raw_mat_before_prod'] = round(raw_mat, 1)
         semi += sm_arr; cw += fp_arr
 
-        # 6. Semi input — PUSH BASED ON FORECAST, PER-STORE AWARE
+        # 6. Semi — just process whatever raw material is available (capacity-limited)
         sn += 1; sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
-        # Shared pipes (semi, fp, cw) split proportionally; dist pipes are per-store
-        shared_wip = sum(semi_pipe) + sum(fp_pipe) + cw
-        down_a_semi = shared_wip * pct_a + sum(dist_pipe_a) + store_a
-        down_b_semi = shared_wip * pct_b + sum(dist_pipe_b) + store_b
-        need_a_semi = max(0, ff * pct_a * lt_from_semi - down_a_semi)
-        need_b_semi = max(0, ff * pct_b * lt_from_semi - down_b_semi)
-        need_semi = need_a_semi + need_b_semi
-        if raw_mat > 0.01 and need_semi > 0.5:
-            si = min(math.ceil(min(raw_mat, sc_)), math.ceil(need_semi))
+        if raw_mat > 0.01:
+            si = math.ceil(min(raw_mat, sc_))
             raw_mat -= si
         else:
             si = 0.0
@@ -217,16 +205,10 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['raw_mat_stock'] = round(raw_mat, 1)
         s['cost_semi'] = round(si * var_cost * (VALOR_SEMI - VALOR_RAW_MAT), 1)
 
-        # 7. FP input — PUSH BASED ON FORECAST, PER-STORE AWARE
+        # 7. FP — just process whatever semi stock is available (capacity-limited)
         fn += 1; fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
-        shared_wip_fp = sum(fp_pipe) + cw
-        down_a_fp = shared_wip_fp * pct_a + sum(dist_pipe_a) + store_a
-        down_b_fp = shared_wip_fp * pct_b + sum(dist_pipe_b) + store_b
-        need_a_fp = max(0, ff * pct_a * lt_from_fp - down_a_fp)
-        need_b_fp = max(0, ff * pct_b * lt_from_fp - down_b_fp)
-        need_fp = need_a_fp + need_b_fp
-        if semi > 0.01 and need_fp > 0.5:
-            fi = min(math.ceil(min(semi, fpc)), math.ceil(need_fp))
+        if semi > 0.01:
+            fi = math.ceil(min(semi, fpc))
             semi -= fi
         else:
             fi = 0.0
@@ -234,24 +216,23 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['semi_stock'] = round(semi, 1)
         s['cost_fp'] = round(fi * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
 
-        # 8. CW — PUSH TO STORES BASED ON FORECAST, PER STORE
-        # Always calculate per-store need (prevents masking)
-        target_a = ff * pct_a * lt_from_cw
-        target_b = ff * pct_b * lt_from_cw
-        downstream_a = sum(dist_pipe_a) + store_a
-        downstream_b = sum(dist_pipe_b) + store_b
-        need_a_cw = max(0, target_a - downstream_a)
-        need_b_cw = max(0, target_b - downstream_b)
-        need_cw = need_a_cw + need_b_cw
-        ship_out = min(math.ceil(cw), math.ceil(need_cw)) if cw > 0.01 and need_cw > 0.5 else 0.0
+        # 8. CW — push everything to stores, allocate per-store
+        ship_out = math.ceil(cw) if cw > 0.01 else 0.0
         cw -= ship_out
         s['cw_shipped'] = round(ship_out, 1); s['cw_stock'] = round(cw, 1)
 
-        # Allocate: Smart = proportional to need; Push = 50/50 blind
+        # Allocate: Smart = proportional to per-store need; Push = 50/50
         if ship_out > 0:
-            if smart_distrib and need_cw > 0.01:
-                alloc_a = round(ship_out * (need_a_cw / need_cw))
-                alloc_b = ship_out - alloc_a
+            if smart_distrib:
+                need_a = max(0, ff * pct_a * dist_lt - sum(dist_pipe_a) - store_a)
+                need_b = max(0, ff * pct_b * dist_lt - sum(dist_pipe_b) - store_b)
+                total_need = need_a + need_b
+                if total_need > 0.01:
+                    alloc_a = round(ship_out * (need_a / total_need))
+                    alloc_b = ship_out - alloc_a
+                else:
+                    alloc_a = round(ship_out * pct_a)
+                    alloc_b = ship_out - alloc_a
             else:
                 alloc_a = round(ship_out * 0.5)
                 alloc_b = ship_out - alloc_a
@@ -450,10 +431,19 @@ def make_sc_html(state, params):
     def pipe_html(pipe, hue, label):
         n = len(pipe)
         rpipe = list(reversed(pipe))
+        bsize = "28px" if n > 6 else "38px"
+        fsize = "8px" if n > 6 else "10px"
         def box(i):
             sty, txt = pipe_box_style(rpipe[i], hue)
-            return f'<div style="width:38px;height:38px;{sty}border:1px solid hsl({hue},20%,80%);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">{txt}</div>'
-        inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
+            return f'<div style="width:{bsize};height:{bsize};{sty}border:1px solid hsl({hue},20%,80%);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:{fsize};font-weight:700;">{txt}</div>'
+        if n > 6:
+            # Wrap to 2 rows
+            mid = (n + 1) // 2
+            row1 = '<div style="display:flex;gap:1px;justify-content:center;">' + "".join(box(i) for i in range(mid)) + '</div>'
+            row2 = '<div style="display:flex;gap:1px;justify-content:center;">' + "".join(box(i) for i in range(mid, n)) + '</div>'
+            inner = f'<div style="display:flex;flex-direction:column;gap:1px;">{row1}{row2}</div>'
+        else:
+            inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
         return f'<div style="text-align:center;flex:1 1 auto;"><div style="font-size:8px;color:#8a96a6;margin-bottom:3px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
 
     def stage_card(title, stock, hue, icon, sub="", alert="", valor_rate=1.0):
