@@ -272,10 +272,10 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['dist_pipe_a'] = [round(x, 1) for x in dist_pipe_a]
         s['dist_pipe_b'] = [round(x, 1) for x in dist_pipe_b]
 
-        # 10. Order — ACCOUNT FOR ALL WIP (point 10)
+        # 10. Order — ACCOUNT FOR ALL WIP INCLUDING SUPPLIER BACKLOG
         total_wip = (sum(mat_pipe) + sum(semi_pipe) + sum(fp_pipe)
                      + sum(dist_pipe_a) + sum(dist_pipe_b)
-                     + raw_mat + semi + cw)
+                     + raw_mat + semi + cw + pb)  # pb = units ordered, not yet shipped
         s['wip_total'] = round(total_wip, 1)
 
         if w in ow:
