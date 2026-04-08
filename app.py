@@ -1095,26 +1095,41 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
         wk_rev = s['sales'] * price
         wk_vc = s.get('cost_mat', 0) + s.get('cost_semi', 0) + s.get('cost_fp', 0)
         wk_margin = wk_rev - wk_vc
+        # Pipeline totals (material in transit between stages)
+        in_mat_pipe = sum(s.get('mat_pipe', []))
+        in_semi_pipe = sum(s.get('semi_pipe', []))
+        in_fp_pipe = sum(s.get('fp_pipe', []))
+        in_dist_a = sum(s.get('dist_pipe_a', []))
+        in_dist_b = sum(s.get('dist_pipe_b', []))
         table_data.append({
             'Week': s['week'],
-            'Demand': s['demand'],
-            'Sales': s['sales'], 'Missed': s['missed'],
+            'Demand': s['demand'], 'Dem A': s['demand_a'], 'Dem B': s['demand_b'],
+            'Sales': s['sales'], 'Sales A': s['sales_a'], 'Sales B': s['sales_b'],
+            'Missed': s['missed'], 'Miss A': s['missed_a'], 'Miss B': s['missed_b'],
             'Stk A': s['store_a'], 'Stk B': s['store_b'],
             'Alloc A': s['alloc_a'], 'Alloc B': s['alloc_b'],
+            'Dist→A': round(in_dist_a, 1), 'Dist→B': round(in_dist_b, 1),
             'CW': s.get('cw_stock', 0),
+            'FP Pipe': round(in_fp_pipe, 1),
             'Semi': s.get('semi_stock', 0),
+            'Semi Pipe': round(in_semi_pipe, 1),
             'Raw Mat': s.get('raw_mat_stock', 0),
+            'Mat Pipe': round(in_mat_pipe, 1),
             'WIP': s.get('wip_total', 0),
             'Order': s['order'], 'Pending': s['pending'],
             'Sup Cap': s.get('supplier_cap', 0),
+            'Semi Cap': s.get('semi_cap', 0),
+            'FP Cap': s.get('fp_cap', 0),
             'Revenue': round(wk_rev),
             'Cost RM': round(s.get('cost_mat', 0)),
             'Cost Semi': round(s.get('cost_semi', 0)),
             'Cost FP': round(s.get('cost_fp', 0)),
+            'Tot VC': round(wk_vc),
             'Margin': round(wk_margin),
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
-    st.caption("**WIP** = all stock in pipelines + intermediate stages + supplier backlog. "
+    st.caption("**Pipes** = material in transit between stages. "
+               "**WIP** = total of all pipes + stocks + supplier backlog. "
                "**Costs** = recognized at physical arrival (RM @50%, Semi +25%, FP +25%).")
 
 # ════════════════════════════════════════════════════════════════
