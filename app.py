@@ -198,20 +198,13 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         else:
             shipped = 0.0
         s['supplier_shipped'] = round(shipped, 1); s['supplier_cap'] = round(pc, 0)
-        # Point 6: NO cost here — cost recognized when material ARRIVES at RM stock
 
-        # 5. Arrivals update stocks — COSTS AT ARRIVAL, INCREMENTAL (point 6)
-        # RM arrives: +50% of var_cost (raw material value)
-        s['cost_mat'] = round(m_arr * var_cost * VALOR_RAW_MAT, 1)
+        # 5. Arrivals update stocks
         raw_mat += m_arr; s['raw_mat_before_prod'] = round(raw_mat, 1)
-        # Semi arrives: +25% incremental (50%→75%, value added by semi processing)
-        s['cost_semi'] = round(sm_arr * var_cost * (VALOR_SEMI - VALOR_RAW_MAT), 1)
         semi += sm_arr
-        # FP arrives at CW: +25% incremental (75%→100%, value added by finishing)
-        s['cost_fp'] = round(fp_arr * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
         cw += fp_arr
 
-        # 6. Semi — process whatever raw material is available (capacity-limited)
+        # 6. Semi — process RM into semi (capacity-limited). Cost at TRANSFORMATION.
         sn += 1; sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
         if raw_mat > 0.01:
             si = math.ceil(min(raw_mat, sc_))
@@ -220,8 +213,9 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             si = 0.0
         s['semi_input'] = round(si, 1); s['semi_cap'] = round(sc_, 0)
         s['raw_mat_stock'] = round(raw_mat, 1)
+        s['cost_semi'] = round(si * var_cost * (VALOR_SEMI - VALOR_RAW_MAT), 1)
 
-        # 7. FP — process whatever semi stock is available (capacity-limited)
+        # 7. FP — process semi into finished (capacity-limited). Cost at TRANSFORMATION.
         fn += 1; fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
         if semi > 0.01:
             fi = math.ceil(min(semi, fpc))
@@ -230,6 +224,7 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
             fi = 0.0
         s['fp_input'] = round(fi, 1); s['fp_cap'] = round(fpc, 0)
         s['semi_stock'] = round(semi, 1)
+        s['cost_fp'] = round(fi * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
 
         # 8. CW — push everything to stores, allocate per-store
         ship_out = math.ceil(cw) if cw > 0.01 else 0.0
@@ -280,6 +275,9 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         s['fp_pipe'] = [round(x, 1) for x in fp_pipe]
         s['dist_pipe_a'] = [round(x, 1) for x in dist_pipe_a]
         s['dist_pipe_b'] = [round(x, 1) for x in dist_pipe_b]
+
+        # RM cost: anticipated 1 week — book cost of what will arrive NEXT week
+        s['cost_mat'] = round(mat_pipe[0] * var_cost * VALOR_RAW_MAT, 1)
 
         # 10. Order — ACCOUNT FOR ALL WIP INCLUDING SUPPLIER BACKLOG
         total_wip = (sum(mat_pipe) + sum(semi_pipe) + sum(fp_pipe)
@@ -1099,8 +1097,6 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
         in_mat_pipe = sum(s.get('mat_pipe', []))
         in_semi_pipe = sum(s.get('semi_pipe', []))
         in_fp_pipe = sum(s.get('fp_pipe', []))
-        in_dist_a = sum(s.get('dist_pipe_a', []))
-        in_dist_b = sum(s.get('dist_pipe_b', []))
         table_data.append({
             'Week': s['week'],
             'Demand': s['demand'], 'Dem A': s['demand_a'], 'Dem B': s['demand_b'],
@@ -1108,7 +1104,6 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Missed': s['missed'], 'Miss A': s['missed_a'], 'Miss B': s['missed_b'],
             'Stk A': s['store_a'], 'Stk B': s['store_b'],
             'Alloc A': s['alloc_a'], 'Alloc B': s['alloc_b'],
-            'Dist→A': round(in_dist_a, 1), 'Dist→B': round(in_dist_b, 1),
             'CW': s.get('cw_stock', 0),
             'FP Pipe': round(in_fp_pipe, 1),
             'Semi': s.get('semi_stock', 0),
@@ -1118,8 +1113,6 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'WIP': s.get('wip_total', 0),
             'Order': s['order'], 'Pending': s['pending'],
             'Sup Cap': s.get('supplier_cap', 0),
-            'Semi Cap': s.get('semi_cap', 0),
-            'FP Cap': s.get('fp_cap', 0),
             'Revenue': round(wk_rev),
             'Cost RM': round(s.get('cost_mat', 0)),
             'Cost Semi': round(s.get('cost_semi', 0)),
@@ -1128,9 +1121,8 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Margin': round(wk_margin),
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
-    st.caption("**Pipes** = material in transit between stages. "
-               "**WIP** = total of all pipes + stocks + supplier backlog. "
-               "**Costs** = recognized at physical arrival (RM @50%, Semi +25%, FP +25%).")
+    st.caption("**Costs**: RM @50% anticipated 1wk before arrival, Semi +25% at processing, FP +25% at processing. "
+               "**WIP** = all pipes + stocks + supplier backlog.")
 
 # ════════════════════════════════════════════════════════════════
 # SAVE SCENARIO (point 4: include demand description)
