@@ -1141,9 +1141,9 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             # FP stage (pipe + processing)
             'FP Pipe': round(in_fp_pipe, 1), 'FP Proc': s.get('fp_input', 0),
             # Semi stage (stock + pipe + processing)
-            'Semi': s.get('semi_stock', 0), 'Semi Pipe': round(in_semi_pipe, 1), 'Semi Proc': s.get('semi_input', 0),
+            'Semi Wait': s.get('semi_stock', 0), 'Semi Pipe': round(in_semi_pipe, 1), 'Semi Proc': s.get('semi_input', 0),
             # RM stage (stock + pipe)
-            'Raw Mat': s.get('raw_mat_stock', 0), 'Mat Pipe': round(in_mat_pipe, 1),
+            'RM Wait': s.get('raw_mat_stock', 0), 'Mat Pipe': round(in_mat_pipe, 1),
             # Totals
             'WIP': s.get('wip_total', 0),
             'Order': s['order'], 'Pending': s['pending'],
