@@ -461,6 +461,8 @@ def make_sc_html(state, params):
 
     def pipe_html(pipe, hue, label):
         n = len(pipe)
+        if n == 0:
+            return ''  # LT=1: no transit pipe, processing is inside the stage card
         rpipe = list(reversed(pipe))
         bsize = "26px" if n > 6 else "38px"
         fsize = "8px" if n > 6 else "10px"
@@ -490,17 +492,24 @@ def make_sc_html(state, params):
             inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
         return f'<div style="text-align:center;flex:1 1 auto;"><div style="font-size:8px;color:#8a96a6;margin-bottom:3px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
 
-    def stage_card(title, stock, hue, icon, sub="", alert="", valor_rate=1.0):
+    def stage_card(title, stock, hue, icon, sub="", alert="", valor_rate=1.0, processing=0):
         is_alert = alert != ""
         bdr = "hsl(0,55%,60%)" if is_alert else f"hsl({hue},30%,75%)"
         bg = "linear-gradient(180deg,hsl(0,70%,97%),hsl(0,50%,94%))" if is_alert else f"linear-gradient(180deg,hsl({hue},20%,99%),hsl({hue},25%,95%))"
-        valor_eur = stock * var_cost * valor_rate
-        valor_txt = f"\u20ac{valor_eur:,.0f} ({valor_rate*100:.0f}%)" if stock > 0.5 else ""
+        total_at_stage = stock + processing
+        valor_eur = total_at_stage * var_cost * valor_rate
+        valor_txt = f"\u20ac{valor_eur:,.0f} ({valor_rate*100:.0f}%)" if total_at_stage > 0.5 else ""
+        proc_html = ""
+        if processing > 0.5:
+            proc_html = (f'<div style="margin-top:3px;padding:2px 6px;background:hsl({hue},25%,88%);'
+                        f'border-radius:4px;font-size:8px;color:hsl({hue},40%,35%);font-weight:700;">'
+                        f'\u2699 {processing:.0f} processing</div>')
         return f'''<div style="background:{bg};border:2px solid {bdr};border-radius:12px;
             padding:10px 12px;min-width:90px;text-align:center;flex:0 0 auto;">
             <div style="font-size:20px;line-height:1;">{icon}</div>
             <div style="font-size:8px;font-weight:700;color:hsl({hue},35%,42%);text-transform:uppercase;letter-spacing:0.8px;margin:3px 0;">{title}</div>
             <div style="font-size:24px;font-weight:800;color:hsl({hue},40%,28%);">{stock:.0f}</div>
+            {proc_html}
             {'<div style="font-size:8px;color:#7a8a9e;margin-top:2px;">'+sub+'</div>' if sub else ''}
             {'<div style="font-size:8px;color:#9aa;margin-top:1px;font-style:italic;">'+valor_txt+'</div>' if valor_txt else ''}
             {'<div style="font-size:9px;color:hsl(0,60%,45%);font-weight:700;margin-top:2px;">'+alert+'</div>' if alert else ''}
@@ -526,33 +535,44 @@ def make_sc_html(state, params):
         <span style="font-size:9px;color:#8a96a6;font-weight:700;letter-spacing:1px;">\u25c2 INFO FLOW</span>
     </div>'''
 
+    # Helper: pipe section with arrows, or just arrow if transit portion is empty
+    # pipe[1:] = transit only (first week is "processing inside the stage")
+    def pipe_section(pipe, hue, label):
+        transit = pipe[1:] if len(pipe) > 1 else []
+        if len(transit) == 0:
+            return arr  # direct arrow, no transit boxes (LT=1)
+        return f'{arr}{pipe_html(transit, hue, label)}{arr}'
+
     upstream = f'''<div style="display:flex;align-items:center;gap:4px;flex:1 1 auto;">
         {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
-        {arr}
-        {pipe_html(state['mat_pipe'], H_RM, f"Material {params['mat_lt']}wk")}
-        {arr}
-        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT)}
-        {arr}
-        {pipe_html(state['semi_pipe'], H_SE, f"Semi {params['semi_lt']}wk")}
-        {arr}
-        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI)}
-        {arr}
-        {pipe_html(state['fp_pipe'], H_FP, f"Finish {params['fp_lt']}wk")}
-        {arr}
-        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", "Flow-thru", valor_rate=VALOR_FINISHED)}
+        {pipe_section(state['mat_pipe'], H_RM, f"Material {params['mat_lt']}wk")}
+        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT, processing=state['semi_input'])}
+        {pipe_section(state['semi_pipe'], H_SE, f"Semi {params['semi_lt']}wk")}
+        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI, processing=state['fp_input'])}
+        {pipe_section(state['fp_pipe'], H_FP, f"Finish {params['fp_lt']}wk")}
+        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}", valor_rate=VALOR_FINISHED, processing=state['cw_shipped'])}
     </div>'''
 
+    # Branch arrows with allocation labels
+    alloc_a_val = state['alloc_a']
+    alloc_b_val = state['alloc_b']
+    arr_a = f'<div style="color:#b0bac6;font-size:16px;display:flex;flex-direction:column;align-items:center;flex:0 0 auto;padding:0 2px;"><span>\u25b8</span>{"<span style=font-size:8px;color:hsl(210,40%,50%);font-weight:700;>"+str(int(alloc_a_val))+"</span>" if alloc_a_val > 0.5 else ""}</div>'
+    arr_b = f'<div style="color:#b0bac6;font-size:16px;display:flex;flex-direction:column;align-items:center;flex:0 0 auto;padding:0 2px;"><span>\u25b8</span>{"<span style=font-size:8px;color:hsl(270,40%,50%);font-weight:700;>"+str(int(alloc_b_val))+"</span>" if alloc_b_val > 0.5 else ""}</div>'
+
+    dist_transit_a = state['dist_pipe_a'][1:] if len(state['dist_pipe_a']) > 1 else []
+    dist_transit_b = state['dist_pipe_b'][1:] if len(state['dist_pipe_b']) > 1 else []
+
     branch_a = f'''<div style="display:flex;align-items:center;gap:4px;">
-        {arr}
-        {pipe_html(state['dist_pipe_a'], H_SA, f"Dist A {params['dist_lt']}wk")}
-        {arr}
+        {arr_a}
+        {pipe_html(dist_transit_a, H_SA, f"Dist A {params['dist_lt']}wk") if len(dist_transit_a) > 0 else ''}
+        {arr if len(dist_transit_a) > 0 else ''}
         {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a, valor_rate=VALOR_FINISHED)}
     </div>'''
 
     branch_b = f'''<div style="display:flex;align-items:center;gap:4px;">
-        {arr}
-        {pipe_html(state['dist_pipe_b'], H_SB, f"Dist B {params['dist_lt']}wk")}
-        {arr}
+        {arr_b}
+        {pipe_html(dist_transit_b, H_SB, f"Dist B {params['dist_lt']}wk") if len(dist_transit_b) > 0 else ''}
+        {arr if len(dist_transit_b) > 0 else ''}
         {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b, valor_rate=VALOR_FINISHED)}
     </div>'''
 
