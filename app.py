@@ -543,13 +543,18 @@ def make_sc_html(state, params):
             return arr  # direct arrow, no transit boxes (LT=1)
         return f'{arr}{pipe_html(transit, hue, label)}{arr}'
 
+    mat_transit = params['mat_lt'] - 1
+    semi_transit = params['semi_lt'] - 1
+    fp_transit = params['fp_lt'] - 1
+    dist_transit = params['dist_lt'] - 1
+
     upstream = f'''<div style="display:flex;align-items:center;gap:4px;flex:1 1 auto;">
         {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
-        {pipe_section(state['mat_pipe'], H_RM, f"Material {params['mat_lt']}wk")}
+        {pipe_section(state['mat_pipe'], H_RM, f"Material {mat_transit}wk transit (+1 proc)")}
         {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT, processing=state['semi_input'])}
-        {pipe_section(state['semi_pipe'], H_SE, f"Semi {params['semi_lt']}wk")}
+        {pipe_section(state['semi_pipe'], H_SE, f"Semi {semi_transit}wk transit (+1 proc)")}
         {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI, processing=state['fp_input'])}
-        {pipe_section(state['fp_pipe'], H_FP, f"Finish {params['fp_lt']}wk")}
+        {pipe_section(state['fp_pipe'], H_FP, f"Finish {fp_transit}wk transit (+1 proc)")}
         {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}", valor_rate=VALOR_FINISHED, processing=state['cw_shipped'])}
     </div>'''
 
@@ -564,14 +569,14 @@ def make_sc_html(state, params):
 
     branch_a = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr_a}
-        {pipe_html(dist_transit_a, H_SA, f"Dist A {params['dist_lt']}wk") if len(dist_transit_a) > 0 else ''}
+        {pipe_html(dist_transit_a, H_SA, f"Dist A {dist_transit}wk transit (+1 proc)") if len(dist_transit_a) > 0 else ''}
         {arr if len(dist_transit_a) > 0 else ''}
         {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a, valor_rate=VALOR_FINISHED)}
     </div>'''
 
     branch_b = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr_b}
-        {pipe_html(dist_transit_b, H_SB, f"Dist B {params['dist_lt']}wk") if len(dist_transit_b) > 0 else ''}
+        {pipe_html(dist_transit_b, H_SB, f"Dist B {dist_transit}wk transit (+1 proc)") if len(dist_transit_b) > 0 else ''}
         {arr if len(dist_transit_b) > 0 else ''}
         {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b, valor_rate=VALOR_FINISHED)}
     </div>'''
@@ -1113,7 +1118,6 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
         wk_rev = s['sales'] * price
         wk_vc = s.get('cost_mat', 0) + s.get('cost_semi', 0) + s.get('cost_fp', 0)
         wk_margin = wk_rev - wk_vc
-        # Pipeline totals (material in transit between stages)
         in_mat_pipe = sum(s.get('mat_pipe', []))
         in_semi_pipe = sum(s.get('semi_pipe', []))
         in_fp_pipe = sum(s.get('fp_pipe', []))
@@ -1122,17 +1126,22 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Demand': s['demand'], 'Dem A': s['demand_a'], 'Dem B': s['demand_b'],
             'Sales': s['sales'], 'Sales A': s['sales_a'], 'Sales B': s['sales_b'],
             'Missed': s['missed'], 'Miss A': s['missed_a'], 'Miss B': s['missed_b'],
+            # Stores
             'Stk A': s['store_a'], 'Stk B': s['store_b'],
             'Alloc A': s['alloc_a'], 'Alloc B': s['alloc_b'],
-            'CW': s.get('cw_stock', 0),
-            'FP Pipe': round(in_fp_pipe, 1),
-            'Semi': s.get('semi_stock', 0),
-            'Semi Pipe': round(in_semi_pipe, 1),
-            'Raw Mat': s.get('raw_mat_stock', 0),
-            'Mat Pipe': round(in_mat_pipe, 1),
+            # CW stage (stock + processing = shipping out)
+            'CW': s.get('cw_stock', 0), 'CW Ship': s.get('cw_shipped', 0),
+            # FP stage (pipe + processing)
+            'FP Pipe': round(in_fp_pipe, 1), 'FP Proc': s.get('fp_input', 0),
+            # Semi stage (stock + pipe + processing)
+            'Semi': s.get('semi_stock', 0), 'Semi Pipe': round(in_semi_pipe, 1), 'Semi Proc': s.get('semi_input', 0),
+            # RM stage (stock + pipe)
+            'Raw Mat': s.get('raw_mat_stock', 0), 'Mat Pipe': round(in_mat_pipe, 1),
+            # Totals
             'WIP': s.get('wip_total', 0),
             'Order': s['order'], 'Pending': s['pending'],
             'Sup Cap': s.get('supplier_cap', 0),
+            # Financials
             'Revenue': round(wk_rev),
             'Cost RM': round(s.get('cost_mat', 0)),
             'Cost Semi': round(s.get('cost_semi', 0)),
@@ -1141,8 +1150,9 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Margin': round(wk_margin),
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
-    st.caption("**Costs**: RM @50% anticipated 1wk before arrival, Semi +25% at processing, FP +25% at processing. "
-               "**WIP** = all pipes + stocks + supplier backlog.")
+    st.caption("**Proc** = units being processed this week (1wk inside the stage). "
+               "**Pipe** = units in transit between stages. "
+               "**Costs**: RM @50% anticipated 1wk, Semi +25% at processing, FP +25% at processing.")
 
 # ════════════════════════════════════════════════════════════════
 # SAVE SCENARIO (point 4: include demand description)
