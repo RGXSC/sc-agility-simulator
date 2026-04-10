@@ -501,9 +501,16 @@ def make_sc_html(state, params):
         valor_txt = f"\u20ac{valor_eur:,.0f} ({valor_rate*100:.0f}%)" if total_at_stage > 0.5 else ""
         proc_html = ""
         if processing > 0.5:
-            proc_html = (f'<div style="margin-top:3px;padding:2px 6px;background:hsl({hue},25%,88%);'
-                        f'border-radius:4px;font-size:8px;color:hsl({hue},40%,35%);font-weight:700;">'
-                        f'\u2699 {processing:.0f} processing</div>')
+            # Same visual as pipe boxes but with dashed border = "in process, not yet available"
+            light = min(88, 45 + int((processing / cap_ref) * 43))
+            box_bg = f"hsl({hue},48%,{light}%)"
+            box_fg = "#fff" if light < 62 else "#333"
+            proc_html = (f'<div style="margin-top:4px;display:flex;flex-direction:column;align-items:center;">'
+                        f'<div style="font-size:7px;color:hsl({hue},30%,55%);font-weight:600;letter-spacing:0.3px;margin-bottom:1px;">\u2699 processing</div>'
+                        f'<div style="width:38px;height:38px;background:{box_bg};color:{box_fg};'
+                        f'border:2px dashed hsl({hue},30%,60%);border-radius:4px;'
+                        f'display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">'
+                        f'{processing:.0f}</div></div>')
         return f'''<div style="background:{bg};border:2px solid {bdr};border-radius:12px;
             padding:10px 12px;min-width:90px;text-align:center;flex:0 0 auto;">
             <div style="font-size:20px;line-height:1;">{icon}</div>
