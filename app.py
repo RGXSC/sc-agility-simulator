@@ -558,11 +558,11 @@ def make_sc_html(state, params):
     upstream = f'''<div style="display:flex;align-items:center;gap:4px;flex:1 1 auto;">
         {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
         {pipe_section(state['mat_pipe'], H_RM, f"Material {mat_transit}wk transit (+1 proc)")}
-        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT, processing=state['semi_input'])}
+        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT, processing=state['mat_arr'])}
         {pipe_section(state['semi_pipe'], H_SE, f"Semi {semi_transit}wk transit (+1 proc)")}
-        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI, processing=state['fp_input'])}
+        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI, processing=state['semi_arr'])}
         {pipe_section(state['fp_pipe'], H_FP, f"Finish {fp_transit}wk transit (+1 proc)")}
-        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}", valor_rate=VALOR_FINISHED, processing=state['cw_shipped'])}
+        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}", valor_rate=VALOR_FINISHED, processing=state['fp_arr'])}
     </div>'''
 
     # Branch arrows with allocation labels
