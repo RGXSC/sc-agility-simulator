@@ -558,11 +558,11 @@ def make_sc_html(state, params):
     upstream = f'''<div style="display:flex;align-items:center;gap:4px;flex:1 1 auto;">
         {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
         {pipe_section(state['mat_pipe'], H_RM, f"Material {mat_transit}wk transit (+1 proc)")}
-        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT, processing=state['mat_arr'])}
+        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT, processing=state['mat_pipe'][0] if state['mat_pipe'] else 0)}
         {pipe_section(state['semi_pipe'], H_SE, f"Semi {semi_transit}wk transit (+1 proc)")}
-        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI, processing=state['semi_arr'])}
+        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI, processing=state['semi_pipe'][0] if state['semi_pipe'] else 0)}
         {pipe_section(state['fp_pipe'], H_FP, f"Finish {fp_transit}wk transit (+1 proc)")}
-        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}", valor_rate=VALOR_FINISHED, processing=state['fp_arr'])}
+        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}", valor_rate=VALOR_FINISHED, processing=state['fp_pipe'][0] if state['fp_pipe'] else 0)}
     </div>'''
 
     # Branch arrows with allocation labels
@@ -573,19 +573,21 @@ def make_sc_html(state, params):
 
     dist_transit_a = state['dist_pipe_a'][1:] if len(state['dist_pipe_a']) > 1 else []
     dist_transit_b = state['dist_pipe_b'][1:] if len(state['dist_pipe_b']) > 1 else []
+    dist_arriving_a = state['dist_pipe_a'][0] if state['dist_pipe_a'] else 0
+    dist_arriving_b = state['dist_pipe_b'][0] if state['dist_pipe_b'] else 0
 
     branch_a = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr_a}
         {pipe_html(dist_transit_a, H_SA, f"Dist A {dist_transit}wk transit (+1 proc)") if len(dist_transit_a) > 0 else ''}
         {arr if len(dist_transit_a) > 0 else ''}
-        {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a, valor_rate=VALOR_FINISHED)}
+        {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a, valor_rate=VALOR_FINISHED, processing=dist_arriving_a)}
     </div>'''
 
     branch_b = f'''<div style="display:flex;align-items:center;gap:4px;">
         {arr_b}
         {pipe_html(dist_transit_b, H_SB, f"Dist B {dist_transit}wk transit (+1 proc)") if len(dist_transit_b) > 0 else ''}
         {arr if len(dist_transit_b) > 0 else ''}
-        {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b, valor_rate=VALOR_FINISHED)}
+        {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b, valor_rate=VALOR_FINISHED, processing=dist_arriving_b)}
     </div>'''
 
     flow = f'''<div style="display:flex;align-items:center;gap:0px;padding:12px 10px;width:100%;box-sizing:border-box;
