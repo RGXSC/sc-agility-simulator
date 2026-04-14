@@ -518,16 +518,33 @@ def make_sc_html(state, params):
                 f'<div style="display:flex;border:1px solid {C_BOX_BDR};border-radius:8px;overflow:hidden;">'
                 f'{"".join(parts)}</div></div>')
 
-    def buffer_card(title, stock, valor_rate=1.0, sub=""):
+    def buffer_card(title, stock, valor_rate=1.0, sub="", flow=0):
         valor_eur = stock * var_cost * valor_rate
         valor_txt = f"\u20ac{valor_eur:,.0f}" if stock > 0.5 else ""
-        return (f'<div style="background:{C_BUF_BG};border:1.5px solid {C_BUF_BDR};border-radius:10px;'
-                f'padding:6px 10px;min-width:52px;text-align:center;flex:0 0 auto;">'
-                f'<div style="font-size:13px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
-                f'<div style="font-size:24px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
-                f'{"<div style=font-size:13px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
-                f'{"<div style=font-size:13px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
-                f'</div>')
+        if stock > 0.5:
+            # Full card: stock waiting
+            return (f'<div style="background:{C_BUF_BG};border:1.5px solid {C_BUF_BDR};border-radius:10px;'
+                    f'padding:6px 10px;min-width:52px;text-align:center;flex:0 0 auto;">'
+                    f'<div style="font-size:12px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
+                    f'<div style="font-size:24px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
+                    f'{"<div style=font-size:12px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
+                    f'{"<div style=font-size:11px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
+                    f'</div>')
+        elif flow > 0.5:
+            # Compact flow-through: material passing, no stock
+            return (f'<div style="background:{C_BUF_BG};border:1px dashed {C_BUF_BDR};border-radius:8px;'
+                    f'padding:4px 8px;text-align:center;flex:0 0 auto;">'
+                    f'<div style="font-size:10px;font-weight:600;color:{C_TXT_L};text-transform:uppercase;">{title}</div>'
+                    f'<div style="font-size:13px;font-weight:700;color:{C_BUF_FG};">\u21e8 {flow:.0f}</div>'
+                    f'{"<div style=font-size:10px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
+                    f'</div>')
+        else:
+            # Minimal: idle, nothing passing
+            return (f'<div style="background:{C_BUF_BG};border:1px dashed {C_BUF_BDR};border-radius:8px;'
+                    f'padding:3px 6px;text-align:center;flex:0 0 auto;opacity:0.5;">'
+                    f'<div style="font-size:10px;font-weight:600;color:{C_TXT_L};text-transform:uppercase;">{title}</div>'
+                    f'{"<div style=font-size:10px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
+                    f'</div>')
 
     def store_card(title, stock, dem, alert="", processing=0):
         is_alert = alert != ""
@@ -584,11 +601,12 @@ def make_sc_html(state, params):
 
     # Build bands
     mat_band = make_band(state['mat_pipe'], f"Material {mat_lt}wk", mat_lt)
-    rm_card = buffer_card("Raw Mat", state['raw_mat_stock'], VALOR_RAW_MAT)
+    rm_card = buffer_card("Raw Mat", state['raw_mat_stock'], VALOR_RAW_MAT, flow=state['semi_input'])
     semi_band = make_band(state['semi_pipe'], f"Semi {semi_lt}wk", semi_lt)
     fp_band = make_band(state['fp_pipe'], f"Finish {fp_lt}wk", fp_lt)
     cw_card = buffer_card("Central WH", state['cw_stock'], VALOR_FINISHED,
-                          f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}")
+                          f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}",
+                          flow=state['cw_shipped'])
 
     upstream = (f'<div style="display:flex;align-items:center;gap:3px;flex:1 1 auto;">'
                 f'{sup_html}{arr}{mat_band}{arr}{rm_card}{arr}{semi_band}{arr}{fp_band}{arr}{cw_card}</div>')
