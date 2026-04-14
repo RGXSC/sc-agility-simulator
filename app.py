@@ -633,7 +633,7 @@ def make_sc_html(state, params):
     comment_html = f'<div style="padding:8px 16px;font-size:11px;color:{C_TXT};line-height:1.5;background:#f8f9fb;border:1px solid #e8ecf0;border-radius:6px;margin-top:6px;">{comment}</div>'
     physical_flow = f'<div style="text-align:center;padding:8px 0;"><span style="font-size:10px;color:{C_TXT_L};letter-spacing:2px;font-weight:700;">- - - PHYSICAL FLOW (GOODS) - - -</span></div>'
 
-    return f'{info_bar}<div style="padding:4px 0;">{flow}</div>{physical_flow}{comment_html}'
+    return f'<div style="font-family:Arial,Helvetica,sans-serif;">{info_bar}<div style="padding:4px 0;">{flow}</div>{physical_flow}{comment_html}</div>'
 
 # ════════════════════════════════════════════════════════════════
 # SIDEBAR
