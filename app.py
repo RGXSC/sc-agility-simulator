@@ -457,31 +457,31 @@ def make_sc_html(state, params):
     fp_lt = params['fp_lt']; dist_lt = params['dist_lt']
 
     # Grey-blue LVMH palette
-    C_TXT = '#4a5a6e'; C_TXT_L = '#8a96a6'; C_ARR = '#a0aab8'
+    C_TXT = '#2a3a4e'; C_TXT_L = '#5a6a7e'; C_ARR = '#a0aab8'
     C_SUP_BG = '#1a2744'; C_SUP_FG = '#fff'
-    C_BUF_BG = '#f2f4f8'; C_BUF_BDR = '#a0aab8'; C_BUF_FG = '#3a4a5c'
+    C_BUF_BG = '#f2f4f8'; C_BUF_BDR = '#a0aab8'; C_BUF_FG = '#1a2a3e'
     C_BAND_BG = '#e8ecf2'; C_PROC_BG = '#ccd4e0'
-    C_BOX_EMPTY = '#d0d8e4'; C_BOX_FULL = '#6a7e96'; C_BOX_BDR = '#8a96a8'
-    C_PROC_BDR = '#4a5e74'
+    C_BOX_EMPTY = '#c0c8d8'; C_BOX_FULL = '#4a6280'; C_BOX_BDR = '#8a96a8'
+    C_PROC_BDR = '#2a4058'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    arr = f'<div style="color:{C_ARR};font-size:16px;display:flex;align-items:center;flex:0 0 auto;padding:0 2px;">\u25b8</div>'
+    arr = f'<div style="color:{C_ARR};font-size:18px;display:flex;align-items:center;flex:0 0 auto;padding:0 2px;">\u25b8</div>'
 
-    def transit_box(v, size="32px"):
+    def transit_box(v, size="36px"):
         if v > 0.5:
             return (f'<div style="width:{size};height:{size};background:{C_BOX_FULL};'
                     f'border:1px solid {C_BOX_BDR};border-radius:3px;'
                     f'display:flex;align-items:center;justify-content:center;'
-                    f'font-size:9px;font-weight:700;color:#fff;">{v:.0f}</div>')
+                    f'font-size:12px;font-weight:700;color:#fff;">{v:.0f}</div>')
         return (f'<div style="width:{size};height:{size};background:{C_BOX_EMPTY};'
                 f'border:1px solid {C_BOX_BDR};border-radius:3px;"></div>')
 
-    def proc_box(v, size="32px"):
+    def proc_box(v, size="36px"):
         if v > 0.5:
             return (f'<div style="width:{size};height:{size};background:{C_BOX_FULL};'
                     f'border:2px dashed {C_PROC_BDR};border-radius:3px;'
                     f'display:flex;align-items:center;justify-content:center;'
-                    f'font-size:9px;font-weight:700;color:#fff;">{v:.0f}</div>')
+                    f'font-size:12px;font-weight:700;color:#fff;">{v:.0f}</div>')
         return (f'<div style="width:{size};height:{size};background:{C_BOX_EMPTY};opacity:0.3;'
                 f'border:2px dashed {C_PROC_BDR};border-radius:3px;"></div>')
 
@@ -489,14 +489,14 @@ def make_sc_html(state, params):
         transit = pipe[1:] if len(pipe) > 1 else []
         proc_val = pipe[0] if pipe else 0
         n = len(transit)
-        bsize = "24px" if lt > 8 else "32px"
+        bsize = "28px" if lt > 8 else "36px"
         # Transit boxes
         t_html = ""
         if n > 0:
             if n > 6:
                 mid = (n + 1) // 2
-                r1 = "".join(transit_box(transit[-(i+1)], "22px") for i in range(mid))
-                r2 = "".join(transit_box(transit[-(i+1)], "22px") for i in range(mid, n))
+                r1 = "".join(transit_box(transit[-(i+1)], "26px") for i in range(mid))
+                r2 = "".join(transit_box(transit[-(i+1)], "26px") for i in range(mid, n))
                 t_html = (f'<div style="display:flex;flex-direction:column;gap:1px;">'
                     f'<div style="display:flex;gap:1px;">{r1}</div>'
                     f'<div style="display:flex;gap:1px;">{r2}</div></div>')
@@ -511,10 +511,10 @@ def make_sc_html(state, params):
             parts.append(f'<div style="padding:4px 6px;background:{C_BAND_BG};border-radius:8px 0 0 8px;display:flex;align-items:center;gap:2px;">{t_html}</div>')
         parts.append(f'<div style="padding:4px 6px;background:{C_PROC_BG};{"border-radius:8px;" if not t_html else "border-radius:0 8px 8px 0;"}'
                     f'display:flex;align-items:center;flex-direction:column;gap:1px;">'
-                    f'<div style="font-size:6px;color:{C_PROC_BDR};font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">proc</div>'
+                    f'<div style="font-size:12px;color:{C_PROC_BDR};font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">proc</div>'
                     f'{p_html}</div>')
         return (f'<div style="display:flex;flex-direction:column;align-items:center;flex:1 1 auto;">'
-                f'<div style="font-size:8px;color:{C_TXT_L};margin-bottom:2px;font-weight:600;letter-spacing:0.3px;">{label}</div>'
+                f'<div style="font-size:13px;color:{C_TXT_L};margin-bottom:2px;font-weight:600;letter-spacing:0.3px;">{label}</div>'
                 f'<div style="display:flex;border:1px solid {C_BOX_BDR};border-radius:8px;overflow:hidden;">'
                 f'{"".join(parts)}</div></div>')
 
@@ -523,10 +523,10 @@ def make_sc_html(state, params):
         valor_txt = f"\u20ac{valor_eur:,.0f}" if stock > 0.5 else ""
         return (f'<div style="background:{C_BUF_BG};border:1.5px solid {C_BUF_BDR};border-radius:10px;'
                 f'padding:6px 10px;min-width:52px;text-align:center;flex:0 0 auto;">'
-                f'<div style="font-size:7px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
-                f'<div style="font-size:20px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
-                f'{"<div style=font-size:7px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
-                f'{"<div style=font-size:7px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
+                f'<div style="font-size:13px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
+                f'<div style="font-size:24px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
+                f'{"<div style=font-size:13px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
+                f'{"<div style=font-size:13px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
                 f'</div>')
 
     def store_card(title, stock, dem, alert="", processing=0):
@@ -537,19 +537,19 @@ def make_sc_html(state, params):
         valor_txt = f"\u20ac{valor_eur:,.0f}" if (stock + processing) > 0.5 else ""
         proc_html = ""
         if processing > 0.5:
-            proc_html = (f'<div style="margin-top:2px;font-size:7px;color:{C_TXT_L};">\u2699 proc</div>'
-                        f'<div style="width:26px;height:26px;background:{C_BOX_FULL};'
+            proc_html = (f'<div style="margin-top:2px;font-size:13px;color:{C_TXT_L};">\u2699 proc</div>'
+                        f'<div style="width:30px;height:30px;background:{C_BOX_FULL};'
                         f'border:1.5px dashed {C_PROC_BDR};border-radius:3px;'
                         f'display:flex;align-items:center;justify-content:center;'
-                        f'font-size:8px;font-weight:700;color:#fff;margin:1px auto;">{processing:.0f}</div>')
+                        f'font-size:13px;font-weight:700;color:#fff;margin:1px auto;">{processing:.0f}</div>')
         return (f'<div style="background:{bg};border:1.5px solid {bdr};border-radius:10px;'
                 f'padding:6px 8px;min-width:64px;text-align:center;flex:0 0 auto;">'
-                f'<div style="font-size:7px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
-                f'<div style="font-size:20px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
+                f'<div style="font-size:13px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
+                f'<div style="font-size:24px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
                 f'{proc_html}'
-                f'<div style="font-size:7px;color:{C_TXT_L};">Dem {dem:.0f}/wk</div>'
-                f'{"<div style=font-size:7px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
-                f'{"<div style=font-size:8px;color:"+C_LOST_FG+";font-weight:700;>"+alert+"</div>" if alert else ""}'
+                f'<div style="font-size:13px;color:{C_TXT_L};">Dem {dem:.0f}/wk</div>'
+                f'{"<div style=font-size:13px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
+                f'{"<div style=font-size:13px;color:"+C_LOST_FG+";font-weight:700;>"+alert+"</div>" if alert else ""}'
                 f'</div>')
 
     alert_a = f"LOST {state['missed_a']:.0f}" if state['missed_a'] > 0.5 else ""
@@ -562,24 +562,24 @@ def make_sc_html(state, params):
     sup_val = state['backlog'] * var_cost * VALOR_RAW_MAT
     sup_html = (f'<div style="background:{C_SUP_BG};border:1.5px solid #0d1a30;border-radius:10px;'
                 f'padding:8px 10px;min-width:58px;text-align:center;flex:0 0 auto;">'
-                f'<div style="font-size:14px;line-height:1;">\U0001f3ed</div>'
-                f'<div style="font-size:7px;font-weight:700;color:#8aa0c0;text-transform:uppercase;letter-spacing:0.5px;">Supplier</div>'
-                f'<div style="font-size:20px;font-weight:800;color:{C_SUP_FG};">{state["backlog"]:.0f}</div>'
-                f'<div style="font-size:7px;color:#8aa0c0;">Cap {sup_cap:.0f}/wk</div>'
-                f'{"<div style=font-size:7px;color:#8aa0c0;font-style:italic;>\u20ac"+f"{sup_val:,.0f}"+"</div>" if state["backlog"]>0.5 else ""}'
+                f'<div style="font-size:18px;line-height:1;">\U0001f3ed</div>'
+                f'<div style="font-size:13px;font-weight:700;color:#8aa0c0;text-transform:uppercase;letter-spacing:0.5px;">Supplier</div>'
+                f'<div style="font-size:24px;font-weight:800;color:{C_SUP_FG};">{state["backlog"]:.0f}</div>'
+                f'<div style="font-size:13px;color:#8aa0c0;">Cap {sup_cap:.0f}/wk</div>'
+                f'{"<div style=font-size:13px;color:#8aa0c0;font-style:italic;>\u20ac"+f"{sup_val:,.0f}"+"</div>" if state["backlog"]>0.5 else ""}'
                 f'</div>')
 
     # Info bar
     info_bar = f'''<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;
         background:linear-gradient(90deg,#f4f6f9,#eef1f6);
         border:1px solid #dde2ea;border-radius:8px;margin-bottom:8px;">
-        <span style="font-size:11px;color:{C_TXT};">Backlog <b style="color:#8a3030;">{state['backlog']:.0f}</b></span>
-        <span style="font-size:11px;color:{C_TXT};">Pending <b style="color:#8a6a20;">{state['pending']:.0f}</b></span>
-        <span style="font-size:11px;color:{C_TXT};">WIP <b style="color:#2a5a8a;">{wip_val:.0f}</b></span>
-        <span style="font-size:11px;">{order_html}</span>
-        <span style="font-size:11px;color:{C_TXT};">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
-        <span style="font-size:11px;color:{C_TXT};">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}%</span>
-        <span style="font-size:9px;color:{C_TXT_L};font-weight:700;letter-spacing:1px;">\u25c2 INFO FLOW</span>
+        <span style="font-size:13px;color:{C_TXT};">Backlog <b style="color:#8a3030;">{state['backlog']:.0f}</b></span>
+        <span style="font-size:13px;color:{C_TXT};">Pending <b style="color:#8a6a20;">{state['pending']:.0f}</b></span>
+        <span style="font-size:13px;color:{C_TXT};">WIP <b style="color:#2a5a8a;">{wip_val:.0f}</b></span>
+        <span style="font-size:13px;">{order_html}</span>
+        <span style="font-size:13px;color:{C_TXT};">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
+        <span style="font-size:13px;color:{C_TXT};">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}%</span>
+        <span style="font-size:12px;color:{C_TXT_L};font-weight:700;letter-spacing:1px;">\u25c2 INFO FLOW</span>
     </div>'''
 
     # Build bands
@@ -595,12 +595,12 @@ def make_sc_html(state, params):
 
     # Store branches
     aa = state['alloc_a']; ab = state['alloc_b']
-    arr_a = (f'<div style="color:{C_ARR};font-size:14px;display:flex;flex-direction:column;align-items:center;'
+    arr_a = (f'<div style="color:{C_ARR};font-size:18px;display:flex;flex-direction:column;align-items:center;'
              f'flex:0 0 auto;padding:0 1px;"><span>\u25b8</span>'
-             f'{"<span style=font-size:8px;color:#2a5a8a;font-weight:700;>"+str(int(aa))+"</span>" if aa > 0.5 else ""}</div>')
-    arr_b = (f'<div style="color:{C_ARR};font-size:14px;display:flex;flex-direction:column;align-items:center;'
+             f'{"<span style=font-size:13px;color:#2a5a8a;font-weight:700;>"+str(int(aa))+"</span>" if aa > 0.5 else ""}</div>')
+    arr_b = (f'<div style="color:{C_ARR};font-size:18px;display:flex;flex-direction:column;align-items:center;'
              f'flex:0 0 auto;padding:0 1px;"><span>\u25b8</span>'
-             f'{"<span style=font-size:8px;color:#5a4a8a;font-weight:700;>"+str(int(ab))+"</span>" if ab > 0.5 else ""}</div>')
+             f'{"<span style=font-size:13px;color:#5a4a8a;font-weight:700;>"+str(int(ab))+"</span>" if ab > 0.5 else ""}</div>')
 
     dt_a = state['dist_pipe_a'][1:] if len(state['dist_pipe_a']) > 1 else []
     dt_b = state['dist_pipe_b'][1:] if len(state['dist_pipe_b']) > 1 else []
@@ -609,7 +609,7 @@ def make_sc_html(state, params):
 
     def dist_transit_html(tlist):
         if not tlist: return ''
-        boxes = "".join(transit_box(tlist[-(i+1)], "28px") for i in range(len(tlist)))
+        boxes = "".join(transit_box(tlist[-(i+1)], "32px") for i in range(len(tlist)))
         return f'<div style="display:flex;gap:2px;">{boxes}</div>{arr}'
 
     sa = store_card("Store A", state['store_a'], state['demand_a'], alert_a, dp_a)
@@ -629,8 +629,8 @@ def make_sc_html(state, params):
     </div>'''
 
     comment = state.get('comment', '')
-    comment_html = f'<div style="padding:8px 16px;font-size:11px;color:{C_TXT};line-height:1.5;background:#f8f9fb;border:1px solid #e8ecf0;border-radius:6px;margin-top:6px;">{comment}</div>'
-    physical_flow = f'<div style="text-align:center;padding:8px 0;"><span style="font-size:10px;color:{C_TXT_L};letter-spacing:2px;font-weight:700;">- - - PHYSICAL FLOW (GOODS) - - -</span></div>'
+    comment_html = f'<div style="padding:8px 16px;font-size:13px;color:{C_TXT};line-height:1.5;background:#f8f9fb;border:1px solid #e8ecf0;border-radius:6px;margin-top:6px;">{comment}</div>'
+    physical_flow = f'<div style="text-align:center;padding:8px 0;"><span style="font-size:13px;color:{C_TXT_L};letter-spacing:2px;font-weight:700;">- - - PHYSICAL FLOW (GOODS) - - -</span></div>'
 
     return f'<div style="font-family:Arial,Helvetica,sans-serif;">{info_bar}<div style="padding:4px 0;">{flow}</div>{physical_flow}{comment_html}</div>'
 
@@ -697,7 +697,7 @@ with st.sidebar:
     init_rawmat = total_stock - init_store - init_cw - init_semi
 
     st.markdown(
-        f'<div style="background:#f0f2f5;border-radius:8px;padding:8px 12px;font-size:11px;line-height:1.8;">'
+        f'<div style="background:#f0f2f5;border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.8;">'
         f'<b>Store:</b> {init_store} ({store_pct}%) @ 100% <i>(always 50/50 initial)</i> | '
         f'<b>WH:</b> {init_cw} ({warehouse_pct}%) @ 100% | '
         f'<b>Semi:</b> {init_semi} ({semi_pct}%) @ 75% | '
@@ -811,7 +811,7 @@ with st.sidebar:
     price = st.number_input("Selling Price (\u20ac)", 100, 10000, 1000, 100)
     var_cost = st.number_input("Variable Cost / Finished Product (\u20ac)", 10, 5000, 200, 10)
     st.markdown(
-        f'<div style="color:#8a96a6;font-size:11px;font-style:italic;">'
+        f'<div style="color:#8a96a6;font-size:13px;font-style:italic;">'
         f'RM: \u20ac{var_cost * VALOR_RAW_MAT:.0f} (50%) | '
         f'Semi: \u20ac{var_cost * VALOR_SEMI:.0f} (75%) | '
         f'Finished: \u20ac{var_cost:.0f} (100%)</div>',
@@ -963,7 +963,7 @@ with info:
     bar_w = int(pct * 100)
     st.markdown(
         f"<div style='padding:8px 0;'>"
-        f"<div style='font-size:20px;font-weight:800;color:#1a2a40;text-align:center;'>Week {st.session_state.week_num} <span style='font-size:13px;color:#7a8a9e;'>/ {weeks}</span></div>"
+        f"<div style='font-size:24px;font-weight:800;color:#1a2a40;text-align:center;'>Week {st.session_state.week_num} <span style='font-size:13px;color:#7a8a9e;'>/ {weeks}</span></div>"
         f"<div style='background:#e0e4ea;border-radius:4px;height:6px;margin-top:4px;'>"
         f"<div style='background:#4a90d9;height:6px;border-radius:4px;width:{bar_w}%;'></div></div></div>",
         unsafe_allow_html=True)
@@ -1004,7 +1004,7 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-st.components.v1.html(make_sc_html(state, params), height=440, scrolling=False)
+st.components.v1.html(make_sc_html(state, params), height=480, scrolling=False)
 
 # ════════════════════════════════════════════════════════════════
 # DEMAND CHART (point 7: hidden by default in expander)
