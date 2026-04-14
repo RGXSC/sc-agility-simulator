@@ -454,172 +454,186 @@ def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, tot
 def make_sc_html(state, params):
     var_cost = params.get('var_cost', 200)
     cap_ref = max(1, params['cap_start'] * 2.5)
+    mat_lt = params['mat_lt']; semi_lt = params['semi_lt']
+    fp_lt = params['fp_lt']; dist_lt = params['dist_lt']
 
-    def pipe_box_style(v, hue):
+    # Grey-blue LVMH palette
+    C_TXT = '#4a5a6e'; C_TXT_L = '#8a96a6'; C_ARR = '#a0aab8'
+    C_SUP_BG = '#1a2744'; C_SUP_FG = '#fff'
+    C_BUF_BG = '#f2f4f8'; C_BUF_BDR = '#a0aab8'; C_BUF_FG = '#3a4a5c'
+    C_BAND_BG = '#e8ecf2'; C_PROC_BG = '#ccd4e0'
+    C_BOX_EMPTY = '#d0d8e4'; C_BOX_FULL = '#6a7e96'; C_BOX_BDR = '#8a96a8'
+    C_PROC_BDR = '#4a5e74'
+    C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
+
+    arr = f'<div style="color:{C_ARR};font-size:16px;display:flex;align-items:center;flex:0 0 auto;padding:0 2px;">\u25b8</div>'
+
+    def transit_box(v, size="32px"):
         if v > 0.5:
-            light = min(88, 45 + int((v / cap_ref) * 43))
-            return f"background:hsl({hue},48%,{light}%);color:{'#fff' if light<62 else '#333'};", f"{v:.0f}"
-        return f"background:hsl({hue},8%,93%);color:transparent;", ""
+            return (f'<div style="width:{size};height:{size};background:{C_BOX_FULL};'
+                    f'border:1px solid {C_BOX_BDR};border-radius:3px;'
+                    f'display:flex;align-items:center;justify-content:center;'
+                    f'font-size:9px;font-weight:700;color:#fff;">{v:.0f}</div>')
+        return (f'<div style="width:{size};height:{size};background:{C_BOX_EMPTY};'
+                f'border:1px solid {C_BOX_BDR};border-radius:3px;"></div>')
 
-    def pipe_html(pipe, hue, label):
-        n = len(pipe)
-        if n == 0:
-            return ''  # LT=1: no transit pipe, processing is inside the stage card
-        rpipe = list(reversed(pipe))
-        bsize = "26px" if n > 6 else "38px"
-        fsize = "8px" if n > 6 else "10px"
-        def box(i):
-            sty, txt = pipe_box_style(rpipe[i], hue)
-            return f'<div style="width:{bsize};height:{bsize};{sty}border:1px solid hsl({hue},20%,80%);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:{fsize};font-weight:700;">{txt}</div>'
-        if n > 6:
-            mid = (n + 1) // 2
-            # Row 1: first half (closest to arrival) with week markers
-            row1_boxes = "".join(box(i) for i in range(mid))
-            row1 = (f'<div style="display:flex;gap:1px;align-items:center;">'
-                    f'<span style="font-size:7px;color:#b0b8c4;margin-right:2px;">wk1</span>'
-                    f'{row1_boxes}'
-                    f'<span style="font-size:7px;color:#b0b8c4;margin-left:2px;">wk{mid}</span>'
-                    f'</div>')
-            # Continuation arrow
-            cont = '<div style="text-align:center;font-size:8px;color:#8a96a6;line-height:1;">&#8627;</div>'
-            # Row 2: second half
-            row2_boxes = "".join(box(i) for i in range(mid, n))
-            row2 = (f'<div style="display:flex;gap:1px;align-items:center;">'
-                    f'<span style="font-size:7px;color:#b0b8c4;margin-right:2px;">wk{mid+1}</span>'
-                    f'{row2_boxes}'
-                    f'<span style="font-size:7px;color:#b0b8c4;margin-left:2px;">wk{n}</span>'
-                    f'</div>')
-            inner = f'<div style="display:flex;flex-direction:column;gap:0px;background:hsl({hue},6%,96%);border-radius:4px;padding:2px 3px;">{row1}{cont}{row2}</div>'
-        else:
-            inner = '<div style="display:flex;gap:2px;justify-content:center;">' + "".join(box(i) for i in range(n)) + '</div>'
-        return f'<div style="text-align:center;flex:1 1 auto;"><div style="font-size:8px;color:#8a96a6;margin-bottom:3px;font-weight:600;letter-spacing:0.3px;">{label}</div>{inner}</div>'
+    def proc_box(v, size="32px"):
+        if v > 0.5:
+            return (f'<div style="width:{size};height:{size};background:{C_BOX_FULL};'
+                    f'border:2px dashed {C_PROC_BDR};border-radius:3px;'
+                    f'display:flex;align-items:center;justify-content:center;'
+                    f'font-size:9px;font-weight:700;color:#fff;">{v:.0f}</div>')
+        return (f'<div style="width:{size};height:{size};background:{C_BOX_EMPTY};opacity:0.3;'
+                f'border:2px dashed {C_PROC_BDR};border-radius:3px;"></div>')
 
-    def stage_card(title, stock, hue, icon, sub="", alert="", valor_rate=1.0, processing=0):
+    def make_band(pipe, label, lt):
+        transit = pipe[1:] if len(pipe) > 1 else []
+        proc_val = pipe[0] if pipe else 0
+        n = len(transit)
+        bsize = "24px" if lt > 8 else "32px"
+        # Transit boxes
+        t_html = ""
+        if n > 0:
+            if n > 6:
+                mid = (n + 1) // 2
+                r1 = "".join(transit_box(transit[-(i+1)], "22px") for i in range(mid))
+                r2 = "".join(transit_box(transit[-(i+1)], "22px") for i in range(mid, n))
+                t_html = (f'<div style="display:flex;flex-direction:column;gap:1px;">'
+                    f'<div style="display:flex;gap:1px;">{r1}</div>'
+                    f'<div style="display:flex;gap:1px;">{r2}</div></div>')
+            else:
+                boxes = "".join(transit_box(transit[-(i+1)], bsize) for i in range(n))
+                t_html = f'<div style="display:flex;gap:2px;">{boxes}</div>'
+        # Processing box
+        p_html = proc_box(proc_val, bsize)
+        # Band assembly
+        parts = []
+        if t_html:
+            parts.append(f'<div style="padding:4px 6px;background:{C_BAND_BG};border-radius:8px 0 0 8px;display:flex;align-items:center;gap:2px;">{t_html}</div>')
+        parts.append(f'<div style="padding:4px 6px;background:{C_PROC_BG};{"border-radius:8px;" if not t_html else "border-radius:0 8px 8px 0;"}'
+                    f'display:flex;align-items:center;flex-direction:column;gap:1px;">'
+                    f'<div style="font-size:6px;color:{C_PROC_BDR};font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">proc</div>'
+                    f'{p_html}</div>')
+        return (f'<div style="display:flex;flex-direction:column;align-items:center;flex:1 1 auto;">'
+                f'<div style="font-size:8px;color:{C_TXT_L};margin-bottom:2px;font-weight:600;letter-spacing:0.3px;">{label}</div>'
+                f'<div style="display:flex;border:1px solid {C_BOX_BDR};border-radius:8px;overflow:hidden;">'
+                f'{"".join(parts)}</div></div>')
+
+    def buffer_card(title, stock, valor_rate=1.0, sub=""):
+        valor_eur = stock * var_cost * valor_rate
+        valor_txt = f"\u20ac{valor_eur:,.0f}" if stock > 0.5 else ""
+        return (f'<div style="background:{C_BUF_BG};border:1.5px solid {C_BUF_BDR};border-radius:10px;'
+                f'padding:6px 10px;min-width:52px;text-align:center;flex:0 0 auto;">'
+                f'<div style="font-size:7px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
+                f'<div style="font-size:20px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
+                f'{"<div style=font-size:7px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
+                f'{"<div style=font-size:7px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
+                f'</div>')
+
+    def store_card(title, stock, dem, alert="", processing=0):
         is_alert = alert != ""
-        bdr = "hsl(0,55%,60%)" if is_alert else f"hsl({hue},30%,75%)"
-        bg = "linear-gradient(180deg,hsl(0,70%,97%),hsl(0,50%,94%))" if is_alert else f"linear-gradient(180deg,hsl({hue},20%,99%),hsl({hue},25%,95%))"
-        total_at_stage = stock + processing
-        valor_eur = total_at_stage * var_cost * valor_rate
-        valor_txt = f"\u20ac{valor_eur:,.0f} ({valor_rate*100:.0f}%)" if total_at_stage > 0.5 else ""
-        # Main number: show total at stage (stock + processing)
-        if stock > 0.5 and processing > 0.5:
-            # Both: show stock as main, processing box below
-            main_num = f"{stock:.0f}"
-            light = min(88, 45 + int((processing / cap_ref) * 43))
-            box_bg = f"hsl({hue},48%,{light}%)"
-            box_fg = "#fff" if light < 62 else "#333"
-            proc_html = (f'<div style="margin-top:4px;display:flex;flex-direction:column;align-items:center;">'
-                        f'<div style="font-size:7px;color:hsl({hue},30%,55%);font-weight:600;letter-spacing:0.3px;margin-bottom:1px;">\u2699 processing</div>'
-                        f'<div style="width:38px;height:38px;background:{box_bg};color:{box_fg};'
-                        f'border:2px dashed hsl({hue},30%,60%);border-radius:4px;'
-                        f'display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">'
-                        f'{processing:.0f}</div></div>')
-        elif processing > 0.5:
-            # No stock, only processing: show processing as main with dashed style
-            main_num = f"\u2699 {processing:.0f}"
-            proc_html = ""
-        else:
-            main_num = f"{stock:.0f}"
-            proc_html = ""
-        return f'''<div style="background:{bg};border:2px solid {bdr};border-radius:12px;
-            padding:10px 12px;min-width:90px;text-align:center;flex:0 0 auto;">
-            <div style="font-size:20px;line-height:1;">{icon}</div>
-            <div style="font-size:8px;font-weight:700;color:hsl({hue},35%,42%);text-transform:uppercase;letter-spacing:0.8px;margin:3px 0;">{title}</div>
-            <div style="font-size:24px;font-weight:800;color:hsl({hue},40%,28%);">{main_num}</div>
-            {proc_html}
-            {'<div style="font-size:8px;color:#7a8a9e;margin-top:2px;">'+sub+'</div>' if sub else ''}
-            {'<div style="font-size:8px;color:#9aa;margin-top:1px;font-style:italic;">'+valor_txt+'</div>' if valor_txt else ''}
-            {'<div style="font-size:9px;color:hsl(0,60%,45%);font-weight:700;margin-top:2px;">'+alert+'</div>' if alert else ''}
-        </div>'''
-
-    arr = '<div style="color:#b0bac6;font-size:20px;display:flex;align-items:center;flex:0 0 auto;padding:0 2px;">\u25b8</div>'
-    H_SA = 210; H_SB = 270; H_CW = 42; H_FP = 38; H_SE = 24; H_RM = 18; H_SU = 145
+        bg = C_LOST_BG if is_alert else C_BUF_BG
+        bdr = C_LOST_BDR if is_alert else C_BUF_BDR
+        valor_eur = (stock + processing) * var_cost * VALOR_FINISHED
+        valor_txt = f"\u20ac{valor_eur:,.0f}" if (stock + processing) > 0.5 else ""
+        proc_html = ""
+        if processing > 0.5:
+            proc_html = (f'<div style="margin-top:2px;font-size:7px;color:{C_TXT_L};">\u2699 proc</div>'
+                        f'<div style="width:26px;height:26px;background:{C_BOX_FULL};'
+                        f'border:1.5px dashed {C_PROC_BDR};border-radius:3px;'
+                        f'display:flex;align-items:center;justify-content:center;'
+                        f'font-size:8px;font-weight:700;color:#fff;margin:1px auto;">{processing:.0f}</div>')
+        return (f'<div style="background:{bg};border:1.5px solid {bdr};border-radius:10px;'
+                f'padding:6px 8px;min-width:64px;text-align:center;flex:0 0 auto;">'
+                f'<div style="font-size:7px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
+                f'<div style="font-size:20px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
+                f'{proc_html}'
+                f'<div style="font-size:7px;color:{C_TXT_L};">Dem {dem:.0f}/wk</div>'
+                f'{"<div style=font-size:7px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
+                f'{"<div style=font-size:8px;color:"+C_LOST_FG+";font-weight:700;>"+alert+"</div>" if alert else ""}'
+                f'</div>')
 
     alert_a = f"LOST {state['missed_a']:.0f}" if state['missed_a'] > 0.5 else ""
     alert_b = f"LOST {state['missed_b']:.0f}" if state['missed_b'] > 0.5 else ""
-    order_html = f"<b style='color:hsl(145,55%,35%);font-size:13px;'>ORDER {state['order']:.0f}</b>" if state['order'] > 0 else "<span style='color:#b0b8c4;'>No order</span>"
+    order_html = f"<b style='color:#2a5a3a;font-size:13px;'>ORDER {state['order']:.0f}</b>" if state['order'] > 0 else f"<span style='color:{C_TXT_L};'>No order</span>"
     wip_val = state.get('wip_total', 0)
 
+    # Supplier
+    sup_cap = state['supplier_cap']
+    sup_val = state['backlog'] * var_cost * VALOR_RAW_MAT
+    sup_html = (f'<div style="background:{C_SUP_BG};border:1.5px solid #0d1a30;border-radius:10px;'
+                f'padding:8px 10px;min-width:58px;text-align:center;flex:0 0 auto;">'
+                f'<div style="font-size:14px;line-height:1;">\U0001f3ed</div>'
+                f'<div style="font-size:7px;font-weight:700;color:#8aa0c0;text-transform:uppercase;letter-spacing:0.5px;">Supplier</div>'
+                f'<div style="font-size:20px;font-weight:800;color:{C_SUP_FG};">{state["backlog"]:.0f}</div>'
+                f'<div style="font-size:7px;color:#8aa0c0;">Cap {sup_cap:.0f}/wk</div>'
+                f'{"<div style=font-size:7px;color:#8aa0c0;font-style:italic;>\u20ac"+f"{sup_val:,.0f}"+"</div>" if state["backlog"]>0.5 else ""}'
+                f'</div>')
+
+    # Info bar
     info_bar = f'''<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;
-        background:linear-gradient(90deg,hsl(145,15%,97%),hsl(215,25%,96%));
-        border:1px solid hsl(215,20%,89%);border-radius:8px;margin-bottom:8px;">
-        <span style="font-size:11px;color:#556;">Backlog <b style="color:hsl(0,55%,50%);">{state['backlog']:.0f}</b></span>
-        <span style="font-size:11px;color:#556;" title="Total ordered minus total arrived at stores">Pending <b style="color:hsl(35,75%,45%);">{state['pending']:.0f}</b></span>
-        <span style="font-size:11px;color:#556;" title="All WIP in pipes + intermediate stocks">WIP <b style="color:hsl(200,60%,40%);">{wip_val:.0f}</b></span>
+        background:linear-gradient(90deg,#f4f6f9,#eef1f6);
+        border:1px solid #dde2ea;border-radius:8px;margin-bottom:8px;">
+        <span style="font-size:11px;color:{C_TXT};">Backlog <b style="color:#8a3030;">{state['backlog']:.0f}</b></span>
+        <span style="font-size:11px;color:{C_TXT};">Pending <b style="color:#8a6a20;">{state['pending']:.0f}</b></span>
+        <span style="font-size:11px;color:{C_TXT};">WIP <b style="color:#2a5a8a;">{wip_val:.0f}</b></span>
         <span style="font-size:11px;">{order_html}</span>
-        <span style="font-size:11px;color:#556;">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
-        <span style="font-size:11px;color:#556;">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}%</span>
-        <span style="font-size:9px;color:#8a96a6;font-weight:700;letter-spacing:1px;">\u25c2 INFO FLOW</span>
+        <span style="font-size:11px;color:{C_TXT};">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
+        <span style="font-size:11px;color:{C_TXT};">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}%</span>
+        <span style="font-size:9px;color:{C_TXT_L};font-weight:700;letter-spacing:1px;">\u25c2 INFO FLOW</span>
     </div>'''
 
-    # Helper: pipe section with arrows, or just arrow if transit portion is empty
-    # pipe[1:] = transit only (first week is "processing inside the stage")
-    def pipe_section(pipe, hue, label):
-        transit = pipe[1:] if len(pipe) > 1 else []
-        if len(transit) == 0:
-            return arr  # direct arrow, no transit boxes (LT=1)
-        return f'{arr}{pipe_html(transit, hue, label)}{arr}'
+    # Build bands
+    mat_band = make_band(state['mat_pipe'], f"Material {mat_lt}wk", mat_lt)
+    rm_card = buffer_card("Raw Mat", state['raw_mat_stock'], VALOR_RAW_MAT)
+    semi_band = make_band(state['semi_pipe'], f"Semi {semi_lt}wk", semi_lt)
+    fp_band = make_band(state['fp_pipe'], f"Finish {fp_lt}wk", fp_lt)
+    cw_card = buffer_card("Central WH", state['cw_stock'], VALOR_FINISHED,
+                          f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}")
 
-    mat_transit = params['mat_lt'] - 1
-    semi_transit = params['semi_lt'] - 1
-    fp_transit = params['fp_lt'] - 1
-    dist_transit = params['dist_lt'] - 1
+    upstream = (f'<div style="display:flex;align-items:center;gap:3px;flex:1 1 auto;">'
+                f'{sup_html}{arr}{mat_band}{arr}{rm_card}{arr}{semi_band}{arr}{fp_band}{arr}{cw_card}</div>')
 
-    upstream = f'''<div style="display:flex;align-items:center;gap:4px;flex:1 1 auto;">
-        {stage_card("SUPPLIER", state['backlog'], H_SU, "\U0001f3ed", f"Cap {state['supplier_cap']:.0f}/wk")}
-        {pipe_section(state['mat_pipe'], H_RM, f"Material {mat_transit}wk transit (+1 proc)")}
-        {stage_card("RAW MAT", state['raw_mat_stock'], H_RM, "\U0001f4e6", valor_rate=VALOR_RAW_MAT, processing=state['mat_pipe'][0] if state['mat_pipe'] else 0)}
-        {pipe_section(state['semi_pipe'], H_SE, f"Semi {semi_transit}wk transit (+1 proc)")}
-        {stage_card("SEMI", state['semi_stock'], H_SE, "\u2699\ufe0f", f"Cap {state['semi_cap']:.0f}/wk", valor_rate=VALOR_SEMI, processing=state['semi_pipe'][0] if state['semi_pipe'] else 0)}
-        {pipe_section(state['fp_pipe'], H_FP, f"Finish {fp_transit}wk transit (+1 proc)")}
-        {stage_card("CENTRAL WH", state['cw_stock'], H_CW, "\U0001f3ec", f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}", valor_rate=VALOR_FINISHED, processing=state['fp_pipe'][0] if state['fp_pipe'] else 0)}
-    </div>'''
+    # Store branches
+    aa = state['alloc_a']; ab = state['alloc_b']
+    arr_a = (f'<div style="color:{C_ARR};font-size:14px;display:flex;flex-direction:column;align-items:center;'
+             f'flex:0 0 auto;padding:0 1px;"><span>\u25b8</span>'
+             f'{"<span style=font-size:8px;color:#2a5a8a;font-weight:700;>"+str(int(aa))+"</span>" if aa > 0.5 else ""}</div>')
+    arr_b = (f'<div style="color:{C_ARR};font-size:14px;display:flex;flex-direction:column;align-items:center;'
+             f'flex:0 0 auto;padding:0 1px;"><span>\u25b8</span>'
+             f'{"<span style=font-size:8px;color:#5a4a8a;font-weight:700;>"+str(int(ab))+"</span>" if ab > 0.5 else ""}</div>')
 
-    # Branch arrows with allocation labels
-    alloc_a_val = state['alloc_a']
-    alloc_b_val = state['alloc_b']
-    arr_a = f'<div style="color:#b0bac6;font-size:16px;display:flex;flex-direction:column;align-items:center;flex:0 0 auto;padding:0 2px;"><span>\u25b8</span>{"<span style=font-size:8px;color:hsl(210,40%,50%);font-weight:700;>"+str(int(alloc_a_val))+"</span>" if alloc_a_val > 0.5 else ""}</div>'
-    arr_b = f'<div style="color:#b0bac6;font-size:16px;display:flex;flex-direction:column;align-items:center;flex:0 0 auto;padding:0 2px;"><span>\u25b8</span>{"<span style=font-size:8px;color:hsl(270,40%,50%);font-weight:700;>"+str(int(alloc_b_val))+"</span>" if alloc_b_val > 0.5 else ""}</div>'
+    dt_a = state['dist_pipe_a'][1:] if len(state['dist_pipe_a']) > 1 else []
+    dt_b = state['dist_pipe_b'][1:] if len(state['dist_pipe_b']) > 1 else []
+    dp_a = state['dist_pipe_a'][0] if state['dist_pipe_a'] else 0
+    dp_b = state['dist_pipe_b'][0] if state['dist_pipe_b'] else 0
 
-    dist_transit_a = state['dist_pipe_a'][1:] if len(state['dist_pipe_a']) > 1 else []
-    dist_transit_b = state['dist_pipe_b'][1:] if len(state['dist_pipe_b']) > 1 else []
-    dist_arriving_a = state['dist_pipe_a'][0] if state['dist_pipe_a'] else 0
-    dist_arriving_b = state['dist_pipe_b'][0] if state['dist_pipe_b'] else 0
+    def dist_transit_html(tlist):
+        if not tlist: return ''
+        boxes = "".join(transit_box(tlist[-(i+1)], "28px") for i in range(len(tlist)))
+        return f'<div style="display:flex;gap:2px;">{boxes}</div>{arr}'
 
-    branch_a = f'''<div style="display:flex;align-items:center;gap:4px;">
-        {arr_a}
-        {pipe_html(dist_transit_a, H_SA, f"Dist A {dist_transit}wk transit (+1 proc)") if len(dist_transit_a) > 0 else ''}
-        {arr if len(dist_transit_a) > 0 else ''}
-        {stage_card("STORE A", state['store_a'], H_SA, "\U0001f6cd\ufe0f", f"Dem {state['demand_a']:.0f}/wk", alert_a, valor_rate=VALOR_FINISHED, processing=dist_arriving_a)}
-    </div>'''
+    sa = store_card("Store A", state['store_a'], state['demand_a'], alert_a, dp_a)
+    sb = store_card("Store B", state['store_b'], state['demand_b'], alert_b, dp_b)
 
-    branch_b = f'''<div style="display:flex;align-items:center;gap:4px;">
-        {arr_b}
-        {pipe_html(dist_transit_b, H_SB, f"Dist B {dist_transit}wk transit (+1 proc)") if len(dist_transit_b) > 0 else ''}
-        {arr if len(dist_transit_b) > 0 else ''}
-        {stage_card("STORE B", state['store_b'], H_SB, "\U0001f3ea", f"Dem {state['demand_b']:.0f}/wk", alert_b, valor_rate=VALOR_FINISHED, processing=dist_arriving_b)}
-    </div>'''
+    branch_a = f'<div style="display:flex;align-items:center;gap:3px;">{arr_a}{dist_transit_html(dt_a)}{sa}</div>'
+    branch_b = f'<div style="display:flex;align-items:center;gap:3px;">{arr_b}{dist_transit_html(dt_b)}{sb}</div>'
 
     flow = f'''<div style="display:flex;align-items:center;gap:0px;padding:12px 10px;width:100%;box-sizing:border-box;
-        background:linear-gradient(90deg,hsl(145,10%,97%),hsl(215,18%,97%));
-        border:1px solid hsl(215,18%,90%);border-radius:12px;">
+        background:linear-gradient(90deg,#f6f8fa,#f0f2f6);
+        border:1px solid #dde2ea;border-radius:12px;">
         {upstream}
-        <div style="display:flex;flex-direction:column;gap:6px;flex:0 0 auto;">
+        <div style="display:flex;flex-direction:column;gap:5px;flex:0 0 auto;">
             {branch_a}
             {branch_b}
         </div>
     </div>'''
 
-    flow_label = '<div style="text-align:center;margin:4px 0;"><span style="font-size:9px;color:#a0aab4;font-weight:700;letter-spacing:2px;">\u25b8\u25b8\u25b8 PHYSICAL FLOW (GOODS) \u25b8\u25b8\u25b8</span></div>'
-    comment = f'''<div style="padding:8px 16px;background:hsl(215,12%,96%);border:1px solid hsl(215,12%,91%);
-        border-radius:8px;font-size:12px;color:#3a4a5e;line-height:1.6;">{state['comment']}</div>'''
+    comment = state.get('comment', '')
+    comment_html = f'<div style="padding:8px 16px;font-size:11px;color:{C_TXT};line-height:1.5;background:#f8f9fb;border:1px solid #e8ecf0;border-radius:6px;margin-top:6px;">{comment}</div>'
+    physical_flow = f'<div style="text-align:center;padding:8px 0;"><span style="font-size:10px;color:{C_TXT_L};letter-spacing:2px;font-weight:700;">- - - PHYSICAL FLOW (GOODS) - - -</span></div>'
 
-    return f'''<!DOCTYPE html><html><head>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        body {{ margin:0; padding:10px 14px; background:#f4f6f9; font-family:'Inter',system-ui,sans-serif; color:#1a2030; }}
-    </style></head><body>{info_bar}{flow}{flow_label}{comment}</body></html>'''
-
+    return f'{info_bar}<div style="padding:4px 0;">{flow}</div>{physical_flow}{comment_html}'
 
 # ════════════════════════════════════════════════════════════════
 # SIDEBAR
