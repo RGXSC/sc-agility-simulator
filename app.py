@@ -205,23 +205,25 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         cw += fp_arr
 
         # 6. Semi — process RM into semi (capacity-limited). Cost at TRANSFORMATION.
-        sn += 1; sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
+        sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
         if raw_mat > 0.01:
             si = math.ceil(min(raw_mat, sc_))
             raw_mat -= si
         else:
             si = 0.0
+        sn += 1  # ramp for next week (monotonic, always increments)
         s['semi_input'] = round(si, 1); s['semi_cap'] = round(sc_, 0)
         s['raw_mat_stock'] = round(raw_mat, 1)
         s['cost_semi'] = round(si * var_cost * (VALOR_SEMI - VALOR_RAW_MAT), 1)
 
         # 7. FP — process semi into finished (capacity-limited). Cost at TRANSFORMATION.
-        fn += 1; fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
+        fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
         if semi > 0.01:
             fi = math.ceil(min(semi, fpc))
             semi -= fi
         else:
             fi = 0.0
+        fn += 1  # ramp for next week (monotonic, always increments)
         s['fp_input'] = round(fi, 1); s['fp_cap'] = round(fpc, 0)
         s['semi_stock'] = round(semi, 1)
         s['cost_fp'] = round(fi * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
@@ -499,9 +501,10 @@ def make_sc_html(state, params):
         total_at_stage = stock + processing
         valor_eur = total_at_stage * var_cost * valor_rate
         valor_txt = f"\u20ac{valor_eur:,.0f} ({valor_rate*100:.0f}%)" if total_at_stage > 0.5 else ""
-        proc_html = ""
-        if processing > 0.5:
-            # Same visual as pipe boxes but with dashed border = "in process, not yet available"
+        # Main number: show total at stage (stock + processing)
+        if stock > 0.5 and processing > 0.5:
+            # Both: show stock as main, processing box below
+            main_num = f"{stock:.0f}"
             light = min(88, 45 + int((processing / cap_ref) * 43))
             box_bg = f"hsl({hue},48%,{light}%)"
             box_fg = "#fff" if light < 62 else "#333"
@@ -511,11 +514,18 @@ def make_sc_html(state, params):
                         f'border:2px dashed hsl({hue},30%,60%);border-radius:4px;'
                         f'display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">'
                         f'{processing:.0f}</div></div>')
+        elif processing > 0.5:
+            # No stock, only processing: show processing as main with dashed style
+            main_num = f"\u2699 {processing:.0f}"
+            proc_html = ""
+        else:
+            main_num = f"{stock:.0f}"
+            proc_html = ""
         return f'''<div style="background:{bg};border:2px solid {bdr};border-radius:12px;
             padding:10px 12px;min-width:90px;text-align:center;flex:0 0 auto;">
             <div style="font-size:20px;line-height:1;">{icon}</div>
             <div style="font-size:8px;font-weight:700;color:hsl({hue},35%,42%);text-transform:uppercase;letter-spacing:0.8px;margin:3px 0;">{title}</div>
-            <div style="font-size:24px;font-weight:800;color:hsl({hue},40%,28%);">{stock:.0f}</div>
+            <div style="font-size:24px;font-weight:800;color:hsl({hue},40%,28%);">{main_num}</div>
             {proc_html}
             {'<div style="font-size:8px;color:#7a8a9e;margin-top:2px;">'+sub+'</div>' if sub else ''}
             {'<div style="font-size:8px;color:#9aa;margin-top:1px;font-style:italic;">'+valor_txt+'</div>' if valor_txt else ''}
@@ -1138,14 +1148,14 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             # Stores
             'Stk A': s['store_a'], 'Stk B': s['store_b'],
             'Alloc A': s['alloc_a'], 'Alloc B': s['alloc_b'],
-            # CW stage (stock + processing = shipping out)
+            # CW stage
             'CW': s.get('cw_stock', 0), 'CW Ship': s.get('cw_shipped', 0),
-            # FP stage (pipe + processing)
-            'FP Pipe': round(in_fp_pipe, 1), 'FP Proc': s.get('fp_input', 0),
-            # Semi stage (stock + pipe + processing)
-            'Semi Wait': s.get('semi_stock', 0), 'Semi Pipe': round(in_semi_pipe, 1), 'Semi Proc': s.get('semi_input', 0),
-            # RM stage (stock + pipe)
-            'RM Wait': s.get('raw_mat_stock', 0), 'Mat Pipe': round(in_mat_pipe, 1),
+            # FP pipe
+            'FP Pipe': round(in_fp_pipe, 1),
+            # Semi stage (wait = buffer stock, proc = transformation AT semi stage)
+            'Semi Wait': s.get('semi_stock', 0), 'Semi Pipe': round(in_semi_pipe, 1), 'Semi Proc': s.get('fp_input', 0),
+            # RM stage (wait = buffer stock, proc = transformation AT RM stage)
+            'RM Wait': s.get('raw_mat_stock', 0), 'RM Proc': s.get('semi_input', 0), 'Mat Pipe': round(in_mat_pipe, 1),
             # Totals
             'WIP': s.get('wip_total', 0),
             'Order': s['order'], 'Pending': s['pending'],
@@ -1159,9 +1169,10 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Margin': round(wk_margin),
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
-    st.caption("**Proc** = units being processed this week (1wk inside the stage). "
-               "**Pipe** = units in transit between stages. "
-               "**Costs**: RM @50% anticipated 1wk, Semi +25% at processing, FP +25% at processing.")
+    st.caption("**RM Proc** = units transformed at RM stage (RM\u2192Semi). "
+               "**Semi Proc** = units transformed at Semi stage (Semi\u2192FP). "
+               "**CW Ship** = units shipped to stores. "
+               "**Costs**: RM @50% anticipated 1wk, Semi +25% at RM Proc, FP +25% at Semi Proc.")
 
 # ════════════════════════════════════════════════════════════════
 # SAVE SCENARIO (point 4: include demand description)
