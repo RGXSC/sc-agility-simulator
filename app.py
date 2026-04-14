@@ -189,14 +189,13 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         })
 
         # 4. Supplier — capacity ramps starting the week AFTER first order
-        if first_order_week is not None and w > first_order_week:
-            pn += 1
-        pc = cap_start * (1 + pn * cap_ramp) if pn > 0 else float(cap_start)
-        pc = min(pc, cap_start * 10)
+        pc = min(cap_start * (1 + pn * cap_ramp), cap_start * 10)
         if pb > 0.01:
             shipped = math.ceil(min(pb, pc)); pb -= shipped
         else:
             shipped = 0.0
+        if first_order_week is not None and w > first_order_week:
+            pn += 1  # ramp for NEXT week
         s['supplier_shipped'] = round(shipped, 1); s['supplier_cap'] = round(pc, 0)
 
         # 5. Arrivals update stocks
