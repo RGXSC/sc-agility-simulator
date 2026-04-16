@@ -203,29 +203,45 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         semi += sm_arr
         cw += fp_arr
 
-        # 6. Semi — process RM into semi (capacity-limited). Cost at TRANSFORMATION.
+        # 5b. ORDER DECISION (before processing, so factory sees the order)
+        # WIP calculated from pre-processing state
+        pre_wip = (sum(mat_pipe) + sum(semi_pipe) + sum(fp_pipe)
+                   + sum(dist_pipe_a) + sum(dist_pipe_b)
+                   + raw_mat + semi + cw + pb)
+        od = 0
+        if w in ow:
+            tgt = ff * coverage
+            existing = store_total + pre_wip
+            od = math.ceil(max(0, tgt - existing))
+            co += od; pb += od; s['order'] = round(od, 0)
+            if od > 0 and first_order_week is None:
+                first_order_week = w
+        else:
+            s['order'] = 0
+
+        # 6. Semi — process RM into semi (capacity-limited)
+        # Only starts processing after first order has been placed
         sc_ = min(cap_start * (1 + sn * cap_ramp), cap_start * 10)
-        if raw_mat > 0.01:
+        if raw_mat > 0.01 and first_order_week is not None:
             si = math.ceil(min(raw_mat, sc_))
             raw_mat -= si
         else:
             si = 0.0
-        sn += 1  # ramp for next week (monotonic, always increments)
+        sn += 1
         s['semi_input'] = round(si, 1); s['semi_cap'] = round(sc_, 0)
         s['raw_mat_stock'] = round(raw_mat, 1)
-        s['cost_semi'] = round(si * var_cost * (VALOR_SEMI - VALOR_RAW_MAT), 1)
 
-        # 7. FP — process semi into finished (capacity-limited). Cost at TRANSFORMATION.
+        # 7. FP — process semi into finished (capacity-limited)
+        # Only starts processing after first order has been placed
         fpc = min(cap_start * (1 + fn * cap_ramp), cap_start * 10)
-        if semi > 0.01:
+        if semi > 0.01 and first_order_week is not None:
             fi = math.ceil(min(semi, fpc))
             semi -= fi
         else:
             fi = 0.0
-        fn += 1  # ramp for next week (monotonic, always increments)
+        fn += 1
         s['fp_input'] = round(fi, 1); s['fp_cap'] = round(fpc, 0)
         s['semi_stock'] = round(semi, 1)
-        s['cost_fp'] = round(fi * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
 
         # 8. CW — push everything to stores, allocate per-store
         ship_out = math.ceil(cw) if cw > 0.01 else 0.0
@@ -279,22 +295,16 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
 
         # RM cost: anticipated 1 week — book cost of what will arrive NEXT week
         s['cost_mat'] = round(mat_pipe[0] * var_cost * VALOR_RAW_MAT, 1)
+        # Semi cost: anticipated 1 week — what will arrive at Semi stage NEXT week
+        s['cost_semi'] = round(semi_pipe[0] * var_cost * (VALOR_SEMI - VALOR_RAW_MAT), 1)
+        # FP cost: anticipated 1 week — what will arrive at CW NEXT week
+        s['cost_fp'] = round(fp_pipe[0] * var_cost * (VALOR_FINISHED - VALOR_SEMI), 1)
 
-        # 10. Order — ACCOUNT FOR ALL WIP INCLUDING SUPPLIER BACKLOG
+        # 10. Post-processing WIP (for display)
         total_wip = (sum(mat_pipe) + sum(semi_pipe) + sum(fp_pipe)
                      + sum(dist_pipe_a) + sum(dist_pipe_b)
-                     + raw_mat + semi + cw + pb)  # pb = units ordered, not yet shipped
+                     + raw_mat + semi + cw + pb)
         s['wip_total'] = round(total_wip, 1)
-
-        if w in ow:
-            tgt = ff * coverage
-            existing = store_total + total_wip
-            od = math.ceil(max(0, tgt - existing))
-            co += od; pb += od; s['order'] = round(od, 0)
-            if od > 0 and first_order_week is None:
-                first_order_week = w  # capacity starts ramping next week
-        else:
-            s['order'] = 0
         s['pending'] = round(co - cas, 0); s['backlog'] = round(pb, 0)
         s['coverage'] = coverage
 
@@ -414,6 +424,7 @@ def compute_kpis(states, price, var_cost, fixed_pct, base_forecast, weeks,
         'useful_units': ts, 'useless_units': useless_units,
         'total_system_units': total_system_units,
         'cost_of_sold': cost_of_sold, 'cost_of_unsold': cost_of_unsold,
+        'leftover_value': end_stock_value + end_pipe_value,
     }
 
 
@@ -447,210 +458,307 @@ def cumulative_kpis(states, week, price, var_cost, fixed_pct, base_forecast, tot
             'useful_pct': useful_pct, 'useless_pct': 100 - useful_pct}
 
 
-# ════════════════════════════════════════════════════════════════
-# SC VISUALIZATION
-# ════════════════════════════════════════════════════════════════
 def make_sc_html(state, params):
     var_cost = params.get('var_cost', 200)
-    cap_ref = max(1, params['cap_start'] * 2.5)
     mat_lt = params['mat_lt']; semi_lt = params['semi_lt']
     fp_lt = params['fp_lt']; dist_lt = params['dist_lt']
+    total_lt = mat_lt + semi_lt + fp_lt + dist_lt
 
     # Grey-blue LVMH palette
     C_TXT = '#2a3a4e'; C_TXT_L = '#5a6a7e'; C_ARR = '#a0aab8'
-    C_SUP_BG = '#1a2744'; C_SUP_FG = '#fff'
-    C_BUF_BG = '#f2f4f8'; C_BUF_BDR = '#a0aab8'; C_BUF_FG = '#1a2a3e'
-    C_BAND_BG = '#e8ecf2'; C_PROC_BG = '#ccd4e0'
-    C_BOX_EMPTY = '#c0c8d8'; C_BOX_FULL = '#4a6280'; C_BOX_BDR = '#8a96a8'
-    C_PROC_BDR = '#2a4058'
+    C_HEADER_BG = '#c8d4e6'; C_HEADER_BDR = '#5a6a7e'; C_HEADER_FG = '#1a2a3e'
+    C_BOX_BG = '#f2f4f8'; C_BOX_BDR = '#8a96a8'
+    C_BOX_FILL = '#4a6280'; C_BOX_FILL_FG = '#ffffff'
+    C_WIP_BG = '#f8f9fb'; C_WIP_BDR = '#b0b8c4'
+    C_SUP_BG = '#1a2744'; C_SUP_FG = '#ffffff'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    arr = f'<div style="color:{C_ARR};font-size:18px;display:flex;align-items:center;flex:0 0 auto;padding:0 2px;">\u25b8</div>'
+    # Decide layout: wrap if total_lt > 10
+    wrap_mode = total_lt > 10
+    # Box size: smaller when wrapping or long LT
+    if wrap_mode:
+        box_w = 42; box_h = 44
+    elif total_lt > 6:
+        box_w = 56; box_h = 48
+    else:
+        box_w = 64; box_h = 50
 
-    def transit_box(v, size="36px"):
-        if v > 0.5:
-            return (f'<div style="width:{size};height:{size};background:{C_BOX_FULL};'
-                    f'border:1px solid {C_BOX_BDR};border-radius:3px;'
-                    f'display:flex;align-items:center;justify-content:center;'
-                    f'font-size:12px;font-weight:700;color:#fff;">{v:.0f}</div>')
-        return (f'<div style="width:{size};height:{size};background:{C_BOX_EMPTY};'
-                f'border:1px solid {C_BOX_BDR};border-radius:3px;"></div>')
-
-    def proc_box(v, size="36px"):
-        if v > 0.5:
-            return (f'<div style="width:{size};height:{size};background:{C_BOX_FULL};'
-                    f'border:2px dashed {C_PROC_BDR};border-radius:3px;'
-                    f'display:flex;align-items:center;justify-content:center;'
-                    f'font-size:12px;font-weight:700;color:#fff;">{v:.0f}</div>')
-        return (f'<div style="width:{size};height:{size};background:{C_BOX_EMPTY};opacity:0.3;'
-                f'border:2px dashed {C_PROC_BDR};border-radius:3px;"></div>')
-
-    def make_band(pipe, label, lt):
-        transit = pipe[1:] if len(pipe) > 1 else []
-        proc_val = pipe[0] if pipe else 0
-        n = len(transit)
-        bsize = "28px" if lt > 8 else "36px"
-        # Transit boxes
-        t_html = ""
-        if n > 0:
-            if n > 6:
-                mid = (n + 1) // 2
-                r1 = "".join(transit_box(transit[-(i+1)], "26px") for i in range(mid))
-                r2 = "".join(transit_box(transit[-(i+1)], "26px") for i in range(mid, n))
-                t_html = (f'<div style="display:flex;flex-direction:column;gap:1px;">'
-                    f'<div style="display:flex;gap:1px;">{r1}</div>'
-                    f'<div style="display:flex;gap:1px;">{r2}</div></div>')
-            else:
-                boxes = "".join(transit_box(transit[-(i+1)], bsize) for i in range(n))
-                t_html = f'<div style="display:flex;gap:2px;">{boxes}</div>'
-        # Processing box
-        p_html = proc_box(proc_val, bsize)
-        # Band assembly
-        parts = []
-        if t_html:
-            parts.append(f'<div style="padding:4px 6px;background:{C_BAND_BG};border-radius:8px 0 0 8px;display:flex;align-items:center;gap:2px;">{t_html}</div>')
-        parts.append(f'<div style="padding:4px 6px;background:{C_PROC_BG};{"border-radius:8px;" if not t_html else "border-radius:0 8px 8px 0;"}'
-                    f'display:flex;align-items:center;flex-direction:column;gap:1px;">'
-                    f'<div style="font-size:12px;color:{C_PROC_BDR};font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">proc</div>'
-                    f'{p_html}</div>')
-        return (f'<div style="display:flex;flex-direction:column;align-items:center;flex:1 1 auto;">'
-                f'<div style="font-size:13px;color:{C_TXT_L};margin-bottom:2px;font-weight:600;letter-spacing:0.3px;">{label}</div>'
-                f'<div style="display:flex;border:1px solid {C_BOX_BDR};border-radius:8px;overflow:hidden;">'
-                f'{"".join(parts)}</div></div>')
-
-    def buffer_card(title, stock, valor_rate=1.0, sub="", flow=0):
-        valor_eur = stock * var_cost * valor_rate
-        valor_txt = f"\u20ac{valor_eur:,.0f}" if stock > 0.5 else ""
-        if stock > 0.5:
-            # Full card: stock waiting
-            return (f'<div style="background:{C_BUF_BG};border:1.5px solid {C_BUF_BDR};border-radius:10px;'
-                    f'padding:6px 10px;min-width:52px;text-align:center;flex:0 0 auto;">'
-                    f'<div style="font-size:12px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
-                    f'<div style="font-size:24px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
-                    f'{"<div style=font-size:12px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
-                    f'{"<div style=font-size:11px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
-                    f'</div>')
-        elif flow > 0.5:
-            # Compact flow-through: material passing, no stock
-            return (f'<div style="background:{C_BUF_BG};border:1px dashed {C_BUF_BDR};border-radius:8px;'
-                    f'padding:4px 8px;text-align:center;flex:0 0 auto;">'
-                    f'<div style="font-size:10px;font-weight:600;color:{C_TXT_L};text-transform:uppercase;">{title}</div>'
-                    f'<div style="font-size:13px;font-weight:700;color:{C_BUF_FG};">\u21e8 {flow:.0f}</div>'
-                    f'{"<div style=font-size:10px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
-                    f'</div>')
+    def week_box(qty, is_proc=False):
+        """Render one week slot with quantity (or empty)."""
+        if qty > 0.5:
+            bg = C_BOX_FILL; fg = C_BOX_FILL_FG; weight = "700"
+            content = f'{qty:.0f}'
         else:
-            # Minimal: idle, nothing passing
-            return (f'<div style="background:{C_BUF_BG};border:1px dashed {C_BUF_BDR};border-radius:8px;'
-                    f'padding:3px 6px;text-align:center;flex:0 0 auto;opacity:0.5;">'
-                    f'<div style="font-size:10px;font-weight:600;color:{C_TXT_L};text-transform:uppercase;">{title}</div>'
-                    f'{"<div style=font-size:10px;color:"+C_TXT_L+";>"+sub+"</div>" if sub else ""}'
-                    f'</div>')
+            bg = C_BOX_BG; fg = C_TXT_L; weight = "400"
+            content = ''
+        bdr_style = f'2px dashed #2a4058' if is_proc else f'1px solid {C_BOX_BDR}'
+        return (f'<div style="width:{box_w}px;height:{box_h}px;background:{bg};'
+                f'border:{bdr_style};border-radius:4px;display:flex;align-items:center;'
+                f'justify-content:center;font-size:14px;font-weight:{weight};color:{fg};'
+                f'box-sizing:border-box;">{content}</div>')
 
-    def store_card(title, stock, dem, alert="", processing=0):
-        is_alert = alert != ""
-        bg = C_LOST_BG if is_alert else C_BUF_BG
-        bdr = C_LOST_BDR if is_alert else C_BUF_BDR
-        valor_eur = (stock + processing) * var_cost * VALOR_FINISHED
-        valor_txt = f"\u20ac{valor_eur:,.0f}" if (stock + processing) > 0.5 else ""
-        proc_html = ""
-        if processing > 0.5:
-            proc_html = (f'<div style="margin-top:2px;font-size:13px;color:{C_TXT_L};">\u2699 proc</div>'
-                        f'<div style="width:30px;height:30px;background:{C_BOX_FULL};'
-                        f'border:1.5px dashed {C_PROC_BDR};border-radius:3px;'
-                        f'display:flex;align-items:center;justify-content:center;'
-                        f'font-size:13px;font-weight:700;color:#fff;margin:1px auto;">{processing:.0f}</div>')
-        return (f'<div style="background:{bg};border:1.5px solid {bdr};border-radius:10px;'
-                f'padding:6px 8px;min-width:64px;text-align:center;flex:0 0 auto;">'
-                f'<div style="font-size:13px;font-weight:700;color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.5px;">{title}</div>'
-                f'<div style="font-size:24px;font-weight:800;color:{C_BUF_FG};">{stock:.0f}</div>'
-                f'{proc_html}'
-                f'<div style="font-size:13px;color:{C_TXT_L};">Dem {dem:.0f}/wk</div>'
-                f'{"<div style=font-size:13px;color:"+C_TXT_L+";font-style:italic;>"+valor_txt+"</div>" if valor_txt else ""}'
-                f'{"<div style=font-size:13px;color:"+C_LOST_FG+";font-weight:700;>"+alert+"</div>" if alert else ""}'
-                f'</div>')
+    def band_header(label, width_px):
+        """Colored band above a group of week boxes."""
+        return (f'<div style="width:{width_px}px;background:{C_HEADER_BG};'
+                f'border:1px solid {C_HEADER_BDR};border-radius:6px;'
+                f'padding:5px 4px;text-align:center;font-size:12px;'
+                f'font-weight:600;color:{C_HEADER_FG};box-sizing:border-box;">{label}</div>')
 
-    alert_a = f"LOST {state['missed_a']:.0f}" if state['missed_a'] > 0.5 else ""
-    alert_b = f"LOST {state['missed_b']:.0f}" if state['missed_b'] > 0.5 else ""
-    order_html = f"<b style='color:#2a5a3a;font-size:13px;'>ORDER {state['order']:.0f}</b>" if state['order'] > 0 else f"<span style='color:{C_TXT_L};'>No order</span>"
-    wip_val = state.get('wip_total', 0)
+    def wip_label(label, value, width_px):
+        """WIP total shown below a band."""
+        return (f'<div style="width:{width_px}px;background:{C_WIP_BG};'
+                f'border:1px solid {C_WIP_BDR};border-radius:4px;'
+                f'padding:4px 6px;display:flex;justify-content:space-between;'
+                f'font-size:11px;color:{C_TXT};box-sizing:border-box;">'
+                f'<span style="font-weight:600;color:{C_TXT_L};">{label}</span>'
+                f'<span style="font-weight:700;">{value:.0f}</span></div>')
 
-    # Supplier
-    sup_cap = state['supplier_cap']
-    sup_val = state['backlog'] * var_cost * VALOR_RAW_MAT
-    sup_html = (f'<div style="background:{C_SUP_BG};border:1.5px solid #0d1a30;border-radius:10px;'
-                f'padding:8px 10px;min-width:58px;text-align:center;flex:0 0 auto;">'
-                f'<div style="font-size:18px;line-height:1;">\U0001f3ed</div>'
-                f'<div style="font-size:13px;font-weight:700;color:#8aa0c0;text-transform:uppercase;letter-spacing:0.5px;">Supplier</div>'
-                f'<div style="font-size:24px;font-weight:800;color:{C_SUP_FG};">{state["backlog"]:.0f}</div>'
-                f'<div style="font-size:13px;color:#8aa0c0;">Cap {sup_cap:.0f}/wk</div>'
-                f'{"<div style=font-size:13px;color:#8aa0c0;font-style:italic;>\u20ac"+f"{sup_val:,.0f}"+"</div>" if state["backlog"]>0.5 else ""}'
-                f'</div>')
+    # === BUILD WEEK-BY-WEEK CONTENT ===
+    # Map pipes to weeks (W1 = leftmost/upstream, W_last = rightmost/downstream)
+    # Material band: mat_pipe, oldest (just entered) at index n-1, newest (about to exit) at index 0
+    # So for display: mat_pipe reversed → W1 = mat_pipe[-1], W_mat = mat_pipe[0]
+    mat_pipe = state.get('mat_pipe', [])
+    semi_pipe = state.get('semi_pipe', [])
+    fp_pipe = state.get('fp_pipe', [])
+    dist_pipe_a = state.get('dist_pipe_a', [])
+    dist_pipe_b = state.get('dist_pipe_b', [])
+    raw_mat = state.get('raw_mat_stock', 0)
+    semi = state.get('semi_stock', 0)
+    cw = state.get('cw_stock', 0)
 
-    # Info bar
-    info_bar = f'''<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;
-        background:linear-gradient(90deg,#f4f6f9,#eef1f6);
-        border:1px solid #dde2ea;border-radius:8px;margin-bottom:8px;">
-        <span style="font-size:13px;color:{C_TXT};">Backlog <b style="color:#8a3030;">{state['backlog']:.0f}</b></span>
-        <span style="font-size:13px;color:{C_TXT};">Pending <b style="color:#8a6a20;">{state['pending']:.0f}</b></span>
-        <span style="font-size:13px;color:{C_TXT};">WIP <b style="color:#2a5a8a;">{wip_val:.0f}</b></span>
-        <span style="font-size:13px;">{order_html}</span>
-        <span style="font-size:13px;color:{C_TXT};">Forecast <b style="color:#1a2a40;">{state['forecast']:.0f}</b>/wk</span>
-        <span style="font-size:13px;color:{C_TXT};">A:{params['store_a_pct']}% B:{100-params['store_a_pct']}%</span>
-        <span style="font-size:12px;color:{C_TXT_L};font-weight:700;letter-spacing:1px;">\u25c2 INFO FLOW</span>
-    </div>'''
+    # Each stage's weeks: reversed pipe shows W1 (upstream) to W_last (downstream)
+    # Material: W1..W_mat = mat_pipe reversed (mat_pipe[-1] is W1, mat_pipe[0] is W_mat)
+    # The "last week" of a stage = the processing week (where material is transformed)
+    # Buffer stocks (raw_mat, semi) are inserted at the END of their corresponding stage's last week
+    #   — they represent material that has been processed but is waiting.
+    # But simplest mapping: pipe[0] = last week of stage (about to exit/arrive next)
+    #                       pipe[-1] = first week of stage (just entered)
 
-    # Build bands
-    mat_band = make_band(state['mat_pipe'], f"Material {mat_lt}wk", mat_lt)
-    rm_card = buffer_card("Raw Mat", state['raw_mat_stock'], VALOR_RAW_MAT, flow=state['semi_input'])
-    semi_band = make_band(state['semi_pipe'], f"Semi {semi_lt}wk", semi_lt)
-    fp_band = make_band(state['fp_pipe'], f"Finish {fp_lt}wk", fp_lt)
-    cw_card = buffer_card("Central WH", state['cw_stock'], VALOR_FINISHED,
-                          f"A:{state['alloc_a']:.0f} B:{state['alloc_b']:.0f}",
-                          flow=state['cw_shipped'])
+    # Per user: initial stock goes in the LAST week of each stage (ready to exit next)
+    # At W0 of simulation, we expect:
+    #   mat band last week (W_mat) = initial RM position
+    #   semi band last week (W_mat+W_semi) = initial Semi position
+    #   finish+CW band = initial CW position
+    #   dist band → stores directly
+    # At runtime this happens naturally: mat_pipe[-1] is first week, mat_pipe[0] is last week.
+    # The stage "buffer" (raw_mat, semi, cw) sits AT the last week of its band
+    # (after processing but before moving to next stage).
 
-    upstream = (f'<div style="display:flex;align-items:center;gap:3px;flex:1 1 auto;">'
-                f'{sup_html}{arr}{mat_band}{arr}{rm_card}{arr}{semi_band}{arr}{fp_band}{arr}{cw_card}</div>')
+    # For visual: we merge pipe + stage buffer into the band.
+    # Material band (mat_lt weeks):
+    #   W1 (entered first) = mat_pipe[-1] ... W_mat_lt (exiting) = raw_mat (the buffer)
+    #   Actually the pipe already represents the "in transit" weeks.
+    #   Let's say Material band = mat_lt boxes showing mat_pipe[::-1]
+    #   Then raw_mat buffer sits BETWEEN material and semi bands → we merge it into
+    #   the last slot of Material band (add raw_mat to the last box).
 
-    # Store branches
-    aa = state['alloc_a']; ab = state['alloc_b']
-    arr_a = (f'<div style="color:{C_ARR};font-size:18px;display:flex;flex-direction:column;align-items:center;'
-             f'flex:0 0 auto;padding:0 1px;"><span>\u25b8</span>'
-             f'{"<span style=font-size:13px;color:#2a5a8a;font-weight:700;>"+str(int(aa))+"</span>" if aa > 0.5 else ""}</div>')
-    arr_b = (f'<div style="color:{C_ARR};font-size:18px;display:flex;flex-direction:column;align-items:center;'
-             f'flex:0 0 auto;padding:0 1px;"><span>\u25b8</span>'
-             f'{"<span style=font-size:13px;color:#5a4a8a;font-weight:700;>"+str(int(ab))+"</span>" if ab > 0.5 else ""}</div>')
+    def reversed_list(lst):
+        return list(reversed(lst)) if lst else []
 
-    dt_a = state['dist_pipe_a'][1:] if len(state['dist_pipe_a']) > 1 else []
-    dt_b = state['dist_pipe_b'][1:] if len(state['dist_pipe_b']) > 1 else []
-    dp_a = state['dist_pipe_a'][0] if state['dist_pipe_a'] else 0
-    dp_b = state['dist_pipe_b'][0] if state['dist_pipe_b'] else 0
+    mat_weeks = reversed_list(mat_pipe)   # W1...W_mat
+    semi_weeks = reversed_list(semi_pipe) # first semi week...last semi week
+    fp_weeks = reversed_list(fp_pipe)
 
-    def dist_transit_html(tlist):
-        if not tlist: return ''
-        boxes = "".join(transit_box(tlist[-(i+1)], "32px") for i in range(len(tlist)))
-        return f'<div style="display:flex;gap:2px;">{boxes}</div>{arr}'
+    # Put buffer at end of each band (downstream position)
+    # Material band: last week gets + raw_mat
+    if mat_weeks:
+        mat_weeks[-1] = mat_weeks[-1] + raw_mat
+    # Semi band: last week gets + semi stock
+    if semi_weeks:
+        semi_weeks[-1] = semi_weeks[-1] + semi
+    # Finish band: last week gets + cw stock
+    if fp_weeks:
+        fp_weeks[-1] = fp_weeks[-1] + cw
 
-    sa = store_card("Store A", state['store_a'], state['demand_a'], alert_a, dp_a)
-    sb = store_card("Store B", state['store_b'], state['demand_b'], alert_b, dp_b)
+    # Distribution band: dist_lt weeks per store, combined view shows A+B total flow
+    # Each dist week slot = sum(a[i] + b[i]) at that pipe position
+    dist_a_weeks = reversed_list(dist_pipe_a)
+    dist_b_weeks = reversed_list(dist_pipe_b)
 
-    branch_a = f'<div style="display:flex;align-items:center;gap:3px;">{arr_a}{dist_transit_html(dt_a)}{sa}</div>'
-    branch_b = f'<div style="display:flex;align-items:center;gap:3px;">{arr_b}{dist_transit_html(dt_b)}{sb}</div>'
+    # === LAYOUT ===
+    # Row structure:
+    #   [Order card | Stage headers ... | Store labels]
+    #   [Supplier card | Week boxes ... | Store cards]
+    #   [Capa/Cost | WIP labels ... | (blank)]
 
-    flow = f'''<div style="display:flex;align-items:center;gap:0px;padding:12px 10px;width:100%;box-sizing:border-box;
-        background:linear-gradient(90deg,#f6f8fa,#f0f2f6);
-        border:1px solid #dde2ea;border-radius:12px;">
-        {upstream}
-        <div style="display:flex;flex-direction:column;gap:5px;flex:0 0 auto;">
-            {branch_a}
-            {branch_b}
-        </div>
-    </div>'''
+    # Compute widths
+    gap_px = 3  # gap between boxes
+    def band_width(n):
+        return n * box_w + (n - 1) * gap_px + 8  # small padding
 
+    mat_band_w = band_width(mat_lt)
+    semi_band_w = band_width(semi_lt)
+    fp_band_w = band_width(fp_lt)
+    dist_band_w = band_width(dist_lt)
+
+    # === WIP per band ===
+    wip_mat = sum(mat_pipe) + raw_mat
+    wip_semi = sum(semi_pipe) + semi
+    wip_fp = sum(fp_pipe) + cw
+    wip_dist_a = sum(dist_pipe_a)
+    wip_dist_b = sum(dist_pipe_b)
+
+    # === Build week box rows ===
+    def boxes_row(weeks, proc_last=True, weeks_labels_start=1):
+        """Generate row of week boxes with labels above."""
+        labels_html = ''.join(
+            f'<div style="width:{box_w}px;text-align:center;font-size:10px;'
+            f'color:{C_TXT_L};font-weight:600;margin-bottom:2px;">W{weeks_labels_start + i}</div>'
+            for i in range(len(weeks))
+        )
+        boxes_html = ''.join(
+            week_box(weeks[i], is_proc=(proc_last and i == len(weeks) - 1))
+            for i in range(len(weeks))
+        )
+        return (
+            f'<div style="display:flex;gap:{gap_px}px;">{labels_html}</div>'
+            f'<div style="display:flex;gap:{gap_px}px;margin-top:2px;">{boxes_html}</div>'
+        )
+
+    # Bands with integrated week boxes
+    def stage_col(label, weeks, band_w_px, wip_value, wip_label_txt, weeks_start):
+        """Full stage column: header band, week labels, week boxes, WIP."""
+        return (
+            f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
+            f'{band_header(label, band_w_px)}'
+            f'<div>{boxes_row(weeks, proc_last=True, weeks_labels_start=weeks_start)}</div>'
+            f'{wip_label(wip_label_txt, wip_value, band_w_px)}'
+            f'</div>'
+        )
+
+    # Left: Supplier card
+    sup_qty = state.get('backlog', 0)
+    sup_cap = state.get('supplier_cap', 0)
+    sup_html = (
+        f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
+        f'{band_header("Order", 72)}'
+        f'<div style="width:72px;height:{box_h + 20}px;background:{C_SUP_BG};'
+        f'border:1.5px solid #0d1a30;border-radius:6px;padding:4px 6px;'
+        f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        f'color:{C_SUP_FG};box-sizing:border-box;">'
+        f'<div style="font-size:10px;font-weight:600;color:#8aa0c0;text-transform:uppercase;">Supplier</div>'
+        f'<div style="font-size:18px;font-weight:800;">{sup_qty:.0f}</div>'
+        f'</div>'
+        f'<div style="width:72px;background:{C_WIP_BG};border:1px solid {C_WIP_BDR};'
+        f'border-radius:4px;padding:4px 6px;font-size:10px;color:{C_TXT};'
+        f'display:flex;justify-content:space-between;box-sizing:border-box;">'
+        f'<span style="color:{C_TXT_L};">Cap</span>'
+        f'<span style="font-weight:700;">{sup_cap:.0f}</span></div>'
+        f'</div>'
+    )
+
+    # Stage columns
+    mat_col = stage_col(f"Material ({mat_lt}wk)", mat_weeks, mat_band_w,
+                        wip_mat, "WIP", 1)
+    semi_col = stage_col(f"Semi ({semi_lt}wk)", semi_weeks, semi_band_w,
+                         wip_semi, "WIP", mat_lt + 1)
+    fp_col = stage_col(f"Finish+CW ({fp_lt}wk)", fp_weeks, fp_band_w,
+                       wip_fp, "WIP", mat_lt + semi_lt + 1)
+
+    # Distribution band: show combined total per week (A+B)
+    dist_combined = [dist_a_weeks[i] + dist_b_weeks[i] for i in range(len(dist_a_weeks))] if dist_a_weeks else []
+    dist_col = (
+        f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
+        f'{band_header(f"Distribution ({dist_lt}wk)", dist_band_w)}'
+        f'<div>{boxes_row(dist_combined, proc_last=True, weeks_labels_start=mat_lt + semi_lt + fp_lt + 1)}</div>'
+        f'<div style="display:flex;flex-direction:column;gap:2px;width:{dist_band_w}px;">'
+        f'{wip_label("WIP A", wip_dist_a, dist_band_w)}'
+        f'{wip_label("WIP B", wip_dist_b, dist_band_w)}'
+        f'</div></div>'
+    )
+
+    # Store cards (right)
+    def store_card(letter, stock, dem, sales, lost):
+        is_alert = lost > 0.5
+        bg = C_LOST_BG if is_alert else C_BOX_BG
+        bdr = C_LOST_BDR if is_alert else C_BOX_BDR
+        return (
+            f'<div style="display:flex;flex-direction:column;gap:3px;">'
+            f'{band_header(f"Store {letter}", 72)}'
+            f'<div style="width:72px;background:{bg};border:1.5px solid {bdr};'
+            f'border-radius:6px;padding:5px 6px;text-align:center;box-sizing:border-box;'
+            f'font-size:10px;color:{C_TXT};">'
+            f'<div style="color:{C_TXT_L};font-weight:600;">Stock</div>'
+            f'<div style="font-size:16px;font-weight:800;color:{C_TXT};margin:1px 0;">{stock:.0f}</div>'
+            f'<div style="color:{C_TXT_L};font-weight:600;margin-top:3px;">Demand</div>'
+            f'<div style="font-size:12px;font-weight:700;">{dem:.0f}</div>'
+            f'<div style="color:{C_TXT_L};font-weight:600;margin-top:3px;">Sales</div>'
+            f'<div style="font-size:12px;font-weight:700;color:#2a5a3a;">{sales:.0f}</div>'
+            f'<div style="color:#8a3030;font-weight:700;margin-top:3px;font-size:11px;">'
+            f'{"LOST " + str(int(lost)) if lost > 0.5 else "Lost: 0"}</div>'
+            f'</div></div>'
+        )
+
+    store_a_html = store_card("A", state.get('store_a', 0), state.get('demand_a', 0),
+                              state.get('sales_a', 0), state.get('missed_a', 0))
+    store_b_html = store_card("B", state.get('store_b', 0), state.get('demand_b', 0),
+                              state.get('sales_b', 0), state.get('missed_b', 0))
+
+    stores_html = (
+        f'<div style="display:flex;flex-direction:column;gap:6px;">'
+        f'{store_a_html}{store_b_html}</div>'
+    )
+
+    # === ASSEMBLE ===
+    # Main upstream row (supplier + 4 stage columns)
+    if wrap_mode:
+        # Wrap into 2 rows: [Supplier | Material | Semi] / [Finish+CW | Distribution | Stores]
+        row1 = (
+            f'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;">'
+            f'{sup_html}{mat_col}{semi_col}</div>'
+        )
+        row2 = (
+            f'<div style="display:flex;align-items:flex-start;gap:8px;">'
+            f'{fp_col}{dist_col}{stores_html}</div>'
+        )
+        main = row1 + row2
+    else:
+        main = (
+            f'<div style="display:flex;align-items:flex-start;gap:6px;">'
+            f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
+        )
+
+    # Info bar (top)
+    order_html = (
+        f'<b style="color:#2a5a3a;font-size:13px;">ORDER {state["order"]:.0f}</b>'
+        if state.get('order', 0) > 0 else f'<span style="color:{C_TXT_L};">No order</span>'
+    )
+    info_bar = (
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'padding:8px 16px;background:linear-gradient(90deg,#f4f6f9,#eef1f6);'
+        f'border:1px solid #dde2ea;border-radius:8px;margin-bottom:10px;'
+        f'font-family:Arial,Helvetica,sans-serif;">'
+        f'<span style="font-size:12px;color:{C_TXT};">Backlog <b style="color:#8a3030;">{state.get("backlog", 0):.0f}</b></span>'
+        f'<span style="font-size:12px;color:{C_TXT};">Pending <b style="color:#8a6a20;">{state.get("pending", 0):.0f}</b></span>'
+        f'<span style="font-size:12px;color:{C_TXT};">WIP <b style="color:#2a5a8a;">{state.get("wip_total", 0):.0f}</b></span>'
+        f'<span style="font-size:12px;">{order_html}</span>'
+        f'<span style="font-size:12px;color:{C_TXT};">Forecast <b style="color:#1a2a40;">{state.get("forecast", 0):.0f}</b>/wk</span>'
+        f'<span style="font-size:12px;color:{C_TXT};">A:{params.get("store_a_pct", 60)}% B:{100 - params.get("store_a_pct", 60)}%</span>'
+        f'</div>'
+    )
+
+    # Comment
     comment = state.get('comment', '')
-    comment_html = f'<div style="padding:8px 16px;font-size:13px;color:{C_TXT};line-height:1.5;background:#f8f9fb;border:1px solid #e8ecf0;border-radius:6px;margin-top:6px;">{comment}</div>'
-    physical_flow = f'<div style="text-align:center;padding:8px 0;"><span style="font-size:13px;color:{C_TXT_L};letter-spacing:2px;font-weight:700;">- - - PHYSICAL FLOW (GOODS) - - -</span></div>'
+    comment_html = (
+        f'<div style="padding:8px 16px;font-size:11px;color:{C_TXT};line-height:1.5;'
+        f'background:#f8f9fb;border:1px solid #e8ecf0;border-radius:6px;margin-top:10px;">{comment}</div>'
+        if comment else ''
+    )
 
-    return f'<div style="font-family:Arial,Helvetica,sans-serif;">{info_bar}<div style="padding:4px 0;">{flow}</div>{physical_flow}{comment_html}</div>'
+    physical_flow = (
+        f'<div style="text-align:center;padding:8px 0;">'
+        f'<span style="font-size:10px;color:{C_TXT_L};letter-spacing:2px;font-weight:700;">'
+        f'- - - PHYSICAL FLOW (GOODS) - - -</span></div>'
+    )
+
+    container = (
+        f'<div style="font-family:Arial,Helvetica,sans-serif;padding:6px;'
+        f'background:linear-gradient(90deg,#f6f8fa,#f0f2f6);'
+        f'border:1px solid #dde2ea;border-radius:12px;overflow-x:auto;">'
+        f'{main}</div>'
+    )
+
+    return f'<div style="font-family:Arial,Helvetica,sans-serif;">{info_bar}{container}{physical_flow}{comment_html}</div>'
 
 # ════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -1022,7 +1130,9 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-st.components.v1.html(make_sc_html(state, params), height=480, scrolling=False)
+_total_lt = params['mat_lt'] + params['semi_lt'] + params['fp_lt'] + params['dist_lt']
+_viz_height = 540 if _total_lt > 10 else 320
+st.components.v1.html(make_sc_html(state, params), height=_viz_height, scrolling=True)
 
 # ════════════════════════════════════════════════════════════════
 # DEMAND CHART (point 7: hidden by default in expander)
@@ -1117,6 +1227,8 @@ with st.expander("\U0001f4cb P&L Summary (end of simulation)", expanded=False):
             "\u2796 Fixed Costs",
             "",
             "= **Net Margin**",
+            "",
+            "\U0001f4e6 Leftover Stock + WIP",
         ],
         "Amount (\u20ac)": [
             f"{fk['revenue']:,.0f}",
@@ -1131,6 +1243,8 @@ with st.expander("\U0001f4cb P&L Summary (end of simulation)", expanded=False):
             f"-{fk['fixed']:,.0f}",
             "",
             f"{fk['margin']:,.0f}",
+            "",
+            f"\u20ac{fk['leftover_value']:,.0f}",
         ],
         "Detail": [
             f"{fk['total_sales']:,.0f} pcs x \u20ac{price}",
@@ -1145,6 +1259,8 @@ with st.expander("\U0001f4cb P&L Summary (end of simulation)", expanded=False):
             f"{fixed_pct*100:.0f}% of simulation forecast revenue",
             "",
             f"{fk['margin_pct']*100:.1f}% of revenue",
+            "",
+            f"{fk['end_stock_units'] + fk['end_pipe_units']:.0f} pcs (store + WIP + pipe), valorized by stage",
         ],
     }
     st.table(pd.DataFrame(pl_data).set_index("Line"))
@@ -1157,7 +1273,7 @@ with st.expander("\U0001f4cb P&L Summary (end of simulation)", expanded=False):
     with u2:
         st.metric("\u2705 Sold (Useful)", f"{fk['useful_units']:,.0f} pcs ({fk['useful_pct']:.0f}%)")
     with u3:
-        st.metric("\u274c Unsold", f"{fk['useless_units']:,.0f} pcs ({fk['useless_pct']:.0f}%)")
+        st.metric("\u274c Remaining WIP + stock", f"{fk['useless_units']:,.0f} pcs ({fk['useless_pct']:.0f}%)")
 
 # ════════════════════════════════════════════════════════════════
 # WEEK-BY-WEEK TABLE (points 5, 6: add RM, Semi in W0; add revenue/cost/margin cols)
@@ -1180,7 +1296,7 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Stk A': s['store_a'], 'Stk B': s['store_b'],
             'Alloc A': s['alloc_a'], 'Alloc B': s['alloc_b'],
             # CW stage
-            'CW': s.get('cw_stock', 0), 'CW Ship': s.get('cw_shipped', 0),
+            'CW Ship': s.get('cw_shipped', 0), 'CW': s.get('cw_stock', 0),
             # FP pipe
             'FP Pipe': round(in_fp_pipe, 1),
             # Semi stage (wait = buffer stock, proc = transformation AT semi stage)
@@ -1202,8 +1318,7 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
     st.caption("**RM Proc** = units transformed at RM stage (RM\u2192Semi). "
                "**Semi Proc** = units transformed at Semi stage (Semi\u2192FP). "
-               "**CW Ship** = units shipped to stores. "
-               "**Costs**: RM @50% anticipated 1wk, Semi +25% at RM Proc, FP +25% at Semi Proc.")
+               "**Costs**: all anticipated 1wk before arrival (RM @50%, Semi +25%, FP +25%).")
 
 # ════════════════════════════════════════════════════════════════
 # SAVE SCENARIO (point 4: include demand description)
