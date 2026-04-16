@@ -473,18 +473,25 @@ def make_sc_html(state, params):
     C_SUP_BG = '#1a2744'; C_SUP_FG = '#ffffff'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    # Box sizing: the max single-row stage determines the size
-    # Weeks wrap within each stage after MAX_PER_ROW
+    # Adaptive box sizing: fit everything in ~1400px viewport width
+    # Total boxes in a row = largest stage's row-width (capped at 8 per wrap)
+    # Plus ~3 side cards (supplier + 2 stores) + gaps
     max_stage = max(mat_lt, semi_lt, fp_lt, dist_lt)
-    effective_width_per_row = min(max_stage, 8)  # cap at 8 boxes per row
-    if effective_width_per_row >= 8:
-        box_w = 78; box_h = 64
-    elif effective_width_per_row >= 6:
-        box_w = 90; box_h = 68
-    elif effective_width_per_row >= 4:
-        box_w = 100; box_h = 70
-    else:
-        box_w = 110; box_h = 74
+    boxes_in_widest_row = min(max_stage, 8)
+    # Total boxes across all stages (single row): mat + semi + fp + dist (up to 8 each)
+    total_boxes_row = min(mat_lt, 8) + min(semi_lt, 8) + min(fp_lt, 8) + min(dist_lt, 8)
+
+    # Target: total_boxes_row * (box_w + gap) + 3 cards * (box_w + 14 + gap) <= 1300
+    # Solve for box_w
+    available_width = 1300
+    side_cards = 3  # supplier + 2 stores
+    gap = 3
+    # total = total_boxes_row * (bw + gap) + side_cards * (bw + 14 + gap) + extra_gaps
+    # extra gaps between stage groups: 5 * 10 = 50
+    extra = 50 + side_cards * 14
+    target_bw = (available_width - extra) / (total_boxes_row + side_cards) - gap
+    box_w = max(48, min(110, int(target_bw)))
+    box_h = max(50, min(74, box_w - 12))
 
     def week_box(qty, is_proc=False):
         """Render one week slot with quantity (or empty). Modern flat style, no harsh borders."""
@@ -773,7 +780,7 @@ def make_sc_html(state, params):
         f'<div style="font-family:Arial,Helvetica,sans-serif;padding:8px;'
         f'background:linear-gradient(90deg,#f6f8fa,#f0f2f6);'
         f'border:1px solid #dde2ea;border-radius:12px;'
-        f'width:100%;box-sizing:border-box;overflow-x:auto;">'
+        f'width:100%;box-sizing:border-box;">'
         f'{main}</div>'
     )
 
@@ -1152,8 +1159,8 @@ st.markdown("")
 _max_stage = max(params['mat_lt'], params['semi_lt'], params['fp_lt'], params['dist_lt'])
 import math as _m
 _rows_needed = _m.ceil(_max_stage / 8)
-_viz_h = 280 + _rows_needed * 90  # base + per-row
-st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=True)
+_viz_h = 240 + _rows_needed * 80
+st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=False)
 
 # ════════════════════════════════════════════════════════════════
 # DEMAND CHART (point 7: hidden by default in expander)
