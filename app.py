@@ -473,17 +473,20 @@ def make_sc_html(state, params):
     C_SUP_BG = '#1a2744'; C_SUP_FG = '#ffffff'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    # Box sizing: large enough to be readable, content spreads across available width
-    if total_lt > 20:
-        box_w = 54; box_h = 58
-    elif total_lt > 14:
-        box_w = 68; box_h = 62
-    elif total_lt > 10:
-        box_w = 80; box_h = 66
-    elif total_lt > 6:
-        box_w = 94; box_h = 70
+    # Box sizing: larger boxes for readability; wrap mode handles long LTs
+    if total_lt > 16:
+        # Wrapped mode — based on max(row1_lt, row2_lt) instead of total
+        row1_lt = mat_lt + semi_lt
+        row2_lt = fp_lt + dist_lt
+        effective_lt = max(row1_lt, row2_lt)
+        if effective_lt > 16: box_w = 62
+        elif effective_lt > 10: box_w = 80
+        else: box_w = 94
+        box_h = 62
     else:
-        box_w = 110; box_h = 74
+        if total_lt > 10: box_w = 80; box_h = 66
+        elif total_lt > 6: box_w = 94; box_h = 70
+        else: box_w = 110; box_h = 74
 
     def week_box(qty, is_proc=False):
         """Render one week slot with quantity (or empty)."""
@@ -702,11 +705,22 @@ def make_sc_html(state, params):
     )
 
     # === ASSEMBLE ===
-    # Single horizontal row, spreading across full container width
-    main = (
-        f'<div style="display:flex;align-items:flex-start;gap:10px;justify-content:flex-start;">'
-        f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
-    )
+    # For long LT (>16wk), split into 2 rows:
+    #   Row 1: Supplier + Material + Semi
+    #   Row 2: Finish+CW + Distribution + Stores
+    # Otherwise single row
+    if total_lt > 16:
+        main = (
+            f'<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">'
+            f'{sup_html}{mat_col}{semi_col}</div>'
+            f'<div style="display:flex;align-items:flex-start;gap:10px;">'
+            f'{fp_col}{dist_col}{stores_html}</div>'
+        )
+    else:
+        main = (
+            f'<div style="display:flex;align-items:flex-start;gap:10px;">'
+            f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
+        )
 
     # Info bar (top)
     order_html = (
@@ -1121,7 +1135,9 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-st.components.v1.html(make_sc_html(state, params), height=480, scrolling=True)
+_total_lt = params['mat_lt'] + params['semi_lt'] + params['fp_lt'] + params['dist_lt']
+_viz_h = 760 if _total_lt > 16 else 440
+st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=True)
 
 # ════════════════════════════════════════════════════════════════
 # DEMAND CHART (point 7: hidden by default in expander)
