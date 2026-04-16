@@ -473,15 +473,15 @@ def make_sc_html(state, params):
     C_SUP_BG = '#1a2744'; C_SUP_FG = '#ffffff'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    # Decide layout: wrap if total_lt > 10
-    wrap_mode = total_lt > 10
-    # Box size: smaller when wrapping or long LT
-    if wrap_mode:
-        box_w = 42; box_h = 44
+    # Decide layout: boxes shrink when LT is long, scroll horizontally if needed
+    if total_lt > 16:
+        box_w = 38; box_h = 42
+    elif total_lt > 10:
+        box_w = 46; box_h = 46
     elif total_lt > 6:
-        box_w = 56; box_h = 48
+        box_w = 56; box_h = 50
     else:
-        box_w = 64; box_h = 50
+        box_w = 64; box_h = 54
 
     def week_box(qty, is_proc=False):
         """Render one week slot with quantity (or empty)."""
@@ -700,23 +700,11 @@ def make_sc_html(state, params):
     )
 
     # === ASSEMBLE ===
-    # Main upstream row (supplier + 4 stage columns)
-    if wrap_mode:
-        # Wrap into 2 rows: [Supplier | Material | Semi] / [Finish+CW | Distribution | Stores]
-        row1 = (
-            f'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;">'
-            f'{sup_html}{mat_col}{semi_col}</div>'
-        )
-        row2 = (
-            f'<div style="display:flex;align-items:flex-start;gap:8px;">'
-            f'{fp_col}{dist_col}{stores_html}</div>'
-        )
-        main = row1 + row2
-    else:
-        main = (
-            f'<div style="display:flex;align-items:flex-start;gap:6px;">'
-            f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
-        )
+    # Always single horizontal row (container scrolls if too wide)
+    main = (
+        f'<div style="display:flex;align-items:flex-start;gap:6px;min-width:max-content;">'
+        f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
+    )
 
     # Info bar (top)
     order_html = (
@@ -1130,9 +1118,7 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-_total_lt = params['mat_lt'] + params['semi_lt'] + params['fp_lt'] + params['dist_lt']
-_viz_height = 540 if _total_lt > 10 else 320
-st.components.v1.html(make_sc_html(state, params), height=_viz_height, scrolling=True)
+st.components.v1.html(make_sc_html(state, params), height=340, scrolling=True)
 
 # ════════════════════════════════════════════════════════════════
 # DEMAND CHART (point 7: hidden by default in expander)
