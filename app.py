@@ -487,34 +487,36 @@ def make_sc_html(state, params):
         box_w = 110; box_h = 74
 
     def week_box(qty, is_proc=False):
-        """Render one week slot with quantity (or empty)."""
+        """Render one week slot with quantity (or empty). Modern flat style, no harsh borders."""
         if qty > 0.5:
             bg = C_BOX_FILL; fg = C_BOX_FILL_FG; weight = "700"
             content = f'{qty:.0f}'
+            bdr = 'none'
         else:
-            bg = C_BOX_BG; fg = C_TXT_L; weight = "400"
+            bg = '#e8ecf2'; fg = '#8a96a6'; weight = "400"
             content = ''
-        bdr_style = f'2px dashed #2a4058' if is_proc else f'1px solid {C_BOX_BDR}'
+            bdr = 'none'
+        # Processing week: subtle accent — left border strip instead of dashed contour
+        proc_style = 'box-shadow: inset 3px 0 0 #2a4058;' if is_proc else ''
         return (f'<div style="width:{box_w}px;height:{box_h}px;background:{bg};'
-                f'border:{bdr_style};border-radius:4px;display:flex;align-items:center;'
-                f'justify-content:center;font-size:14px;font-weight:{weight};color:{fg};'
-                f'box-sizing:border-box;">{content}</div>')
+                f'border:{bdr};border-radius:6px;display:flex;align-items:center;'
+                f'justify-content:center;font-size:15px;font-weight:{weight};color:{fg};'
+                f'{proc_style}box-sizing:border-box;">{content}</div>')
 
     def band_header(label, width_px):
-        """Colored band above a group of week boxes."""
-        return (f'<div style="width:{width_px}px;background:{C_HEADER_BG};'
-                f'border:1px solid {C_HEADER_BDR};border-radius:6px;'
-                f'padding:5px 4px;text-align:center;font-size:12px;'
-                f'font-weight:600;color:{C_HEADER_FG};box-sizing:border-box;">{label}</div>')
+        """Colored band above a group of week boxes. Softer, modern."""
+        return (f'<div style="width:{width_px}px;background:#dce3ed;'
+                f'border-radius:6px;padding:6px 4px;text-align:center;font-size:12px;'
+                f'font-weight:600;color:#2a3a4e;box-sizing:border-box;">{label}</div>')
 
     def wip_label(label, value, width_px):
-        """WIP total shown below a band."""
-        return (f'<div style="width:{width_px}px;background:{C_WIP_BG};'
-                f'border:1px solid {C_WIP_BDR};border-radius:4px;'
-                f'padding:4px 6px;display:flex;justify-content:space-between;'
+        """WIP total shown below a band. Minimal — no border, just subtle bg."""
+        return (f'<div style="width:{width_px}px;background:#f4f6f9;'
+                f'border-radius:5px;padding:5px 8px;display:flex;'
+                f'justify-content:space-between;align-items:center;'
                 f'font-size:11px;color:{C_TXT};box-sizing:border-box;">'
-                f'<span style="font-weight:600;color:{C_TXT_L};">{label}</span>'
-                f'<span style="font-weight:700;">{value:.0f}</span></div>')
+                f'<span style="font-weight:500;color:{C_TXT_L};">{label}</span>'
+                f'<span style="font-weight:700;color:#2a3a4e;">{value:.0f}</span></div>')
 
     # === BUILD WEEK-BY-WEEK CONTENT ===
     # Map pipes to weeks (W1 = leftmost/upstream, W_last = rightmost/downstream)
@@ -652,24 +654,24 @@ def make_sc_html(state, params):
             f'</div>'
         )
 
-    # Left: Supplier card
+    # Left: Supplier card — modern, no harsh border
     sup_qty = state.get('backlog', 0)
     sup_cap = state.get('supplier_cap', 0)
     sup_html = (
         f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
         f'{band_header("Order", box_w + 14)}'
-        f'<div style="width:{box_w + 14}px;height:{box_h + 20}px;background:{C_SUP_BG};'
-        f'border:1.5px solid #0d1a30;border-radius:6px;padding:4px 6px;'
+        f'<div style="width:{box_w + 14}px;height:{box_h + 20}px;background:#2a3a52;'
+        f'border-radius:6px;padding:4px 6px;'
         f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
-        f'color:{C_SUP_FG};box-sizing:border-box;">'
-        f'<div style="font-size:10px;font-weight:600;color:#8aa0c0;text-transform:uppercase;">Supplier</div>'
-        f'<div style="font-size:18px;font-weight:800;">{sup_qty:.0f}</div>'
+        f'color:#fff;box-sizing:border-box;">'
+        f'<div style="font-size:10px;font-weight:500;color:#9aaec6;text-transform:uppercase;letter-spacing:0.5px;">Supplier</div>'
+        f'<div style="font-size:20px;font-weight:700;">{sup_qty:.0f}</div>'
         f'</div>'
-        f'<div style="width:{box_w + 14}px;background:{C_WIP_BG};border:1px solid {C_WIP_BDR};'
-        f'border-radius:4px;padding:4px 6px;font-size:10px;color:{C_TXT};'
+        f'<div style="width:{box_w + 14}px;background:#f4f6f9;'
+        f'border-radius:5px;padding:5px 8px;font-size:10px;color:{C_TXT};'
         f'display:flex;justify-content:space-between;box-sizing:border-box;">'
-        f'<span style="color:{C_TXT_L};">Cap</span>'
-        f'<span style="font-weight:700;">{sup_cap:.0f}</span></div>'
+        f'<span style="color:{C_TXT_L};font-weight:500;">Cap</span>'
+        f'<span style="font-weight:700;color:#2a3a4e;">{sup_cap:.0f}</span></div>'
         f'</div>'
     )
 
@@ -687,31 +689,31 @@ def make_sc_html(state, params):
         f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
         f'{band_header(f"Distribution ({dist_lt}wk)", dist_band_w)}'
         f'<div>{boxes_row(dist_combined, proc_last=True, weeks_labels_start=mat_lt + semi_lt + fp_lt + 1)}</div>'
-        f'<div style="display:flex;flex-direction:column;gap:2px;width:{dist_band_w}px;">'
+        f'<div style="display:flex;flex-direction:column;gap:3px;width:{dist_band_w}px;">'
         f'{wip_label("WIP A", wip_dist_a, dist_band_w)}'
         f'{wip_label("WIP B", wip_dist_b, dist_band_w)}'
         f'</div></div>'
     )
 
-    # Store cards (right)
+    # Store cards — modern, borderless except when LOST
     def store_card(letter, stock, dem, sales, lost):
         is_alert = lost > 0.5
-        bg = C_LOST_BG if is_alert else C_BOX_BG
-        bdr = C_LOST_BDR if is_alert else C_BOX_BDR
+        bg = '#fef0f0' if is_alert else '#f4f6f9'
+        accent = '#c05050' if is_alert else 'transparent'
         return (
             f'<div style="display:flex;flex-direction:column;gap:3px;">'
             f'{band_header(f"Store {letter}", box_w + 14)}'
-            f'<div style="width:{box_w + 14}px;background:{bg};border:1.5px solid {bdr};'
-            f'border-radius:6px;padding:5px 6px;text-align:center;box-sizing:border-box;'
+            f'<div style="width:{box_w + 14}px;background:{bg};'
+            f'{"box-shadow: inset 3px 0 0 "+accent+";" if is_alert else ""}'
+            f'border-radius:6px;padding:8px 8px;text-align:center;box-sizing:border-box;'
             f'font-size:10px;color:{C_TXT};">'
-            f'<div style="color:{C_TXT_L};font-weight:600;">Stock</div>'
-            f'<div style="font-size:16px;font-weight:800;color:{C_TXT};margin:1px 0;">{stock:.0f}</div>'
-            f'<div style="color:{C_TXT_L};font-weight:600;margin-top:3px;">Demand</div>'
-            f'<div style="font-size:12px;font-weight:700;">{dem:.0f}</div>'
-            f'<div style="color:{C_TXT_L};font-weight:600;margin-top:3px;">Sales</div>'
-            f'<div style="font-size:12px;font-weight:700;color:#2a5a3a;">{sales:.0f}</div>'
-            f'<div style="color:#8a3030;font-weight:700;margin-top:3px;font-size:11px;">'
-            f'{"LOST " + str(int(lost)) if lost > 0.5 else "Lost: 0"}</div>'
+            f'<div style="color:{C_TXT_L};font-weight:500;font-size:9px;text-transform:uppercase;letter-spacing:0.4px;">Stock</div>'
+            f'<div style="font-size:18px;font-weight:700;color:{C_TXT};margin:2px 0 4px;">{stock:.0f}</div>'
+            f'<div style="display:flex;justify-content:space-around;margin-top:4px;">'
+            f'<div><div style="color:{C_TXT_L};font-size:9px;text-transform:uppercase;">Dem</div><div style="font-size:12px;font-weight:600;">{dem:.0f}</div></div>'
+            f'<div><div style="color:{C_TXT_L};font-size:9px;text-transform:uppercase;">Sold</div><div style="font-size:12px;font-weight:600;color:#2a5a3a;">{sales:.0f}</div></div>'
+            f'</div>'
+            f'{"<div style=margin-top:6px;background:#c05050;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;>LOST "+str(int(lost))+"</div>" if is_alert else ""}'
             f'</div></div>'
         )
 
@@ -721,15 +723,17 @@ def make_sc_html(state, params):
                               state.get('sales_b', 0), state.get('missed_b', 0))
 
     stores_html = (
-        f'<div style="display:flex;flex-direction:column;gap:6px;">'
+        f'<div style="display:flex;flex-direction:column;gap:6px;justify-content:center;align-self:stretch;">'
         f'{store_a_html}{store_b_html}</div>'
     )
 
     # === ASSEMBLE ===
-    # Always single horizontal row of stage columns (weeks inside each stage may wrap)
+    # Stages on row, stores centered vertically against the pipe
     main = (
+        f'<div style="display:flex;align-items:center;gap:10px;">'
         f'<div style="display:flex;align-items:flex-start;gap:10px;">'
-        f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
+        f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}</div>'
+        f'{stores_html}</div>'
     )
 
     # Info bar (top)
