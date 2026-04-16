@@ -473,20 +473,18 @@ def make_sc_html(state, params):
     C_SUP_BG = '#1a2744'; C_SUP_FG = '#ffffff'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    # Box sizing: larger boxes for readability; wrap mode handles long LTs
-    if total_lt > 16:
-        # Wrapped mode — based on max(row1_lt, row2_lt) instead of total
-        row1_lt = mat_lt + semi_lt
-        row2_lt = fp_lt + dist_lt
-        effective_lt = max(row1_lt, row2_lt)
-        if effective_lt > 16: box_w = 62
-        elif effective_lt > 10: box_w = 80
-        else: box_w = 94
-        box_h = 62
+    # Box sizing: the max single-row stage determines the size
+    # Weeks wrap within each stage after MAX_PER_ROW
+    max_stage = max(mat_lt, semi_lt, fp_lt, dist_lt)
+    effective_width_per_row = min(max_stage, 8)  # cap at 8 boxes per row
+    if effective_width_per_row >= 8:
+        box_w = 78; box_h = 64
+    elif effective_width_per_row >= 6:
+        box_w = 90; box_h = 68
+    elif effective_width_per_row >= 4:
+        box_w = 100; box_h = 70
     else:
-        if total_lt > 10: box_w = 80; box_h = 66
-        elif total_lt > 6: box_w = 94; box_h = 70
-        else: box_w = 110; box_h = 74
+        box_w = 110; box_h = 74
 
     def week_box(qty, is_proc=False):
         """Render one week slot with quantity (or empty)."""
@@ -586,10 +584,12 @@ def make_sc_html(state, params):
     #   [Supplier card | Week boxes ... | Store cards]
     #   [Capa/Cost | WIP labels ... | (blank)]
 
-    # Compute widths
-    gap_px = 3  # gap between boxes
+    # Compute widths (band width capped at MAX_PER_ROW for wrapped stages)
+    gap_px = 3
+    MAX_PER_ROW_PRELIM = 8  # must match MAX_PER_ROW below
     def band_width(n):
-        return n * box_w + (n - 1) * gap_px + 8  # small padding
+        cols = min(n, MAX_PER_ROW_PRELIM)
+        return cols * box_w + (cols - 1) * gap_px + 8
 
     mat_band_w = band_width(mat_lt)
     semi_band_w = band_width(semi_lt)
@@ -603,22 +603,43 @@ def make_sc_html(state, params):
     wip_dist_a = sum(dist_pipe_a)
     wip_dist_b = sum(dist_pipe_b)
 
-    # === Build week box rows ===
+    # === Build week box rows with wrap within stage ===
+    MAX_PER_ROW = 8  # wrap after 8 boxes within a stage
+
     def boxes_row(weeks, proc_last=True, weeks_labels_start=1):
-        """Generate row of week boxes with labels above."""
-        labels_html = ''.join(
-            f'<div style="width:{box_w}px;text-align:center;font-size:10px;'
-            f'color:{C_TXT_L};font-weight:600;margin-bottom:2px;">W{weeks_labels_start + i}</div>'
-            for i in range(len(weeks))
-        )
-        boxes_html = ''.join(
-            week_box(weeks[i], is_proc=(proc_last and i == len(weeks) - 1))
-            for i in range(len(weeks))
-        )
-        return (
-            f'<div style="display:flex;gap:{gap_px}px;">{labels_html}</div>'
-            f'<div style="display:flex;gap:{gap_px}px;margin-top:2px;">{boxes_html}</div>'
-        )
+        """Generate rows of week boxes with labels above. Wraps if > MAX_PER_ROW weeks."""
+        n = len(weeks)
+        if n == 0:
+            return ''
+        # Split into chunks of MAX_PER_ROW
+        chunks = []
+        for i in range(0, n, MAX_PER_ROW):
+            chunk_start = i
+            chunk_end = min(i + MAX_PER_ROW, n)
+            chunks.append((chunk_start, chunk_end))
+
+        rows_html = []
+        for ci, (start, end) in enumerate(chunks):
+            chunk_weeks = weeks[start:end]
+            labels_html = ''.join(
+                f'<div style="width:{box_w}px;text-align:center;font-size:10px;'
+                f'color:{C_TXT_L};font-weight:600;margin-bottom:2px;">W{weeks_labels_start + start + i}</div>'
+                for i in range(len(chunk_weeks))
+            )
+            boxes_html = ''.join(
+                week_box(chunk_weeks[i], is_proc=(proc_last and (start + i) == n - 1))
+                for i in range(len(chunk_weeks))
+            )
+            rows_html.append(
+                f'<div style="display:flex;gap:{gap_px}px;">{labels_html}</div>'
+                f'<div style="display:flex;gap:{gap_px}px;margin-top:2px;margin-bottom:4px;">{boxes_html}</div>'
+            )
+        return ''.join(rows_html)
+
+    def stage_band_width(n_weeks):
+        """Band header width = width of one row of boxes (capped at MAX_PER_ROW)."""
+        cols = min(n_weeks, MAX_PER_ROW)
+        return cols * box_w + (cols - 1) * gap_px + 8
 
     # Bands with integrated week boxes
     def stage_col(label, weeks, band_w_px, wip_value, wip_label_txt, weeks_start):
@@ -705,22 +726,11 @@ def make_sc_html(state, params):
     )
 
     # === ASSEMBLE ===
-    # For long LT (>16wk), split into 2 rows:
-    #   Row 1: Supplier + Material + Semi
-    #   Row 2: Finish+CW + Distribution + Stores
-    # Otherwise single row
-    if total_lt > 16:
-        main = (
-            f'<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">'
-            f'{sup_html}{mat_col}{semi_col}</div>'
-            f'<div style="display:flex;align-items:flex-start;gap:10px;">'
-            f'{fp_col}{dist_col}{stores_html}</div>'
-        )
-    else:
-        main = (
-            f'<div style="display:flex;align-items:flex-start;gap:10px;">'
-            f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
-        )
+    # Always single horizontal row of stage columns (weeks inside each stage may wrap)
+    main = (
+        f'<div style="display:flex;align-items:flex-start;gap:10px;">'
+        f'{sup_html}{mat_col}{semi_col}{fp_col}{dist_col}{stores_html}</div>'
+    )
 
     # Info bar (top)
     order_html = (
@@ -1135,8 +1145,10 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-_total_lt = params['mat_lt'] + params['semi_lt'] + params['fp_lt'] + params['dist_lt']
-_viz_h = 760 if _total_lt > 16 else 440
+_max_stage = max(params['mat_lt'], params['semi_lt'], params['fp_lt'], params['dist_lt'])
+import math as _m
+_rows_needed = _m.ceil(_max_stage / 8)
+_viz_h = 280 + _rows_needed * 90  # base + per-row
 st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=True)
 
 # ════════════════════════════════════════════════════════════════
