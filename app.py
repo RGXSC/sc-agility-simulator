@@ -473,15 +473,19 @@ def make_sc_html(state, params):
     C_SUP_BG = '#1a2744'; C_SUP_FG = '#ffffff'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    # Decide layout: boxes shrink when LT is long, scroll horizontally if needed
-    if total_lt > 16:
-        box_w = 38; box_h = 42
+    # Box sizing: aim to fill available width (~1300px useable)
+    # Total slots: total_lt + ~4 (supplier + 4 gaps + 2 stores worth)
+    # Targets: boxes should be big enough to read clearly
+    if total_lt > 20:
+        box_w = 42; box_h = 48
+    elif total_lt > 14:
+        box_w = 52; box_h = 52
     elif total_lt > 10:
-        box_w = 46; box_h = 46
+        box_w = 62; box_h = 56
     elif total_lt > 6:
-        box_w = 56; box_h = 50
+        box_w = 74; box_h = 60
     else:
-        box_w = 64; box_h = 54
+        box_w = 88; box_h = 64
 
     def week_box(qty, is_proc=False):
         """Render one week slot with quantity (or empty)."""
@@ -631,15 +635,15 @@ def make_sc_html(state, params):
     sup_cap = state.get('supplier_cap', 0)
     sup_html = (
         f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
-        f'{band_header("Order", 72)}'
-        f'<div style="width:72px;height:{box_h + 20}px;background:{C_SUP_BG};'
+        f'{band_header("Order", box_w + 14)}'
+        f'<div style="width:{box_w + 14}px;height:{box_h + 20}px;background:{C_SUP_BG};'
         f'border:1.5px solid #0d1a30;border-radius:6px;padding:4px 6px;'
         f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
         f'color:{C_SUP_FG};box-sizing:border-box;">'
         f'<div style="font-size:10px;font-weight:600;color:#8aa0c0;text-transform:uppercase;">Supplier</div>'
         f'<div style="font-size:18px;font-weight:800;">{sup_qty:.0f}</div>'
         f'</div>'
-        f'<div style="width:72px;background:{C_WIP_BG};border:1px solid {C_WIP_BDR};'
+        f'<div style="width:{box_w + 14}px;background:{C_WIP_BG};border:1px solid {C_WIP_BDR};'
         f'border-radius:4px;padding:4px 6px;font-size:10px;color:{C_TXT};'
         f'display:flex;justify-content:space-between;box-sizing:border-box;">'
         f'<span style="color:{C_TXT_L};">Cap</span>'
@@ -674,8 +678,8 @@ def make_sc_html(state, params):
         bdr = C_LOST_BDR if is_alert else C_BOX_BDR
         return (
             f'<div style="display:flex;flex-direction:column;gap:3px;">'
-            f'{band_header(f"Store {letter}", 72)}'
-            f'<div style="width:72px;background:{bg};border:1.5px solid {bdr};'
+            f'{band_header(f"Store {letter}", box_w + 14)}'
+            f'<div style="width:{box_w + 14}px;background:{bg};border:1.5px solid {bdr};'
             f'border-radius:6px;padding:5px 6px;text-align:center;box-sizing:border-box;'
             f'font-size:10px;color:{C_TXT};">'
             f'<div style="color:{C_TXT_L};font-weight:600;">Stock</div>'
@@ -740,9 +744,10 @@ def make_sc_html(state, params):
     )
 
     container = (
-        f'<div style="font-family:Arial,Helvetica,sans-serif;padding:6px;'
+        f'<div style="font-family:Arial,Helvetica,sans-serif;padding:8px;'
         f'background:linear-gradient(90deg,#f6f8fa,#f0f2f6);'
-        f'border:1px solid #dde2ea;border-radius:12px;overflow-x:auto;">'
+        f'border:1px solid #dde2ea;border-radius:12px;'
+        f'width:100%;box-sizing:border-box;overflow-x:auto;">'
         f'{main}</div>'
     )
 
@@ -1118,7 +1123,7 @@ with k7:
 # SC FLOW VISUALIZATION
 # ════════════════════════════════════════════════════════════════
 st.markdown("")
-st.components.v1.html(make_sc_html(state, params), height=340, scrolling=True)
+st.components.v1.html(make_sc_html(state, params), height=420, scrolling=True)
 
 # ════════════════════════════════════════════════════════════════
 # DEMAND CHART (point 7: hidden by default in expander)
