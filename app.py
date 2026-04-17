@@ -776,12 +776,36 @@ def make_sc_html(state, params):
         f'- - - PHYSICAL FLOW (GOODS) - - -</span></div>'
     )
 
+    # Calculate the intrinsic width of the diagram (approx)
+    # total_boxes_row * (bw + 3) + 3 cards (supplier + 2 stores) + gaps
+    intrinsic_w = (min(mat_lt,8) + min(semi_lt,8) + min(fp_lt,8) + min(dist_lt,8)) * (box_w + 3)
+    intrinsic_w += 3 * (box_w + 14) + 60  # cards + gaps
+
     container = (
         f'<div style="font-family:Arial,Helvetica,sans-serif;padding:8px;'
         f'background:linear-gradient(90deg,#f6f8fa,#f0f2f6);'
         f'border:1px solid #dde2ea;border-radius:12px;'
-        f'width:100%;box-sizing:border-box;">'
+        f'width:100%;box-sizing:border-box;overflow:hidden;">'
+        # Scaler wrapper: JS adjusts transform:scale() to fit parent width
+        f'<div id="sc-scaler" style="transform-origin:top left;width:{intrinsic_w}px;">'
         f'{main}</div>'
+        f'<script>'
+        f'(function(){{'
+        f'  var scaler=document.getElementById("sc-scaler");'
+        f'  if(!scaler) return;'
+        f'  var natural={intrinsic_w};'
+        f'  function fit(){{'
+        f'    var avail=scaler.parentElement.clientWidth - 16;'
+        f'    var scale=Math.min(1, avail/natural);'
+        f'    scaler.style.transform="scale("+scale+")";'
+        f'    scaler.parentElement.style.height=(scaler.offsetHeight*scale)+"px";'
+        f'  }}'
+        f'  fit();'
+        f'  window.addEventListener("resize",fit);'
+        f'  setTimeout(fit,100);setTimeout(fit,500);'
+        f'}})();'
+        f'</script>'
+        f'</div>'
     )
 
     return f'<div style="font-family:Arial,Helvetica,sans-serif;">{info_bar}{container}{physical_flow}{comment_html}</div>'
@@ -1324,13 +1348,13 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Stk A': s['store_a'], 'Stk B': s['store_b'],
             'Alloc A': s['alloc_a'], 'Alloc B': s['alloc_b'],
             # CW stage
-            'CW Ship': s.get('cw_shipped', 0), 'CW': s.get('cw_stock', 0),
+            'CW Wait': s.get('cw_stock', 0), 'CW Pipe': s.get('cw_shipped', 0),
             # FP pipe
             'FP Pipe': round(in_fp_pipe, 1),
-            # Semi stage (wait = buffer stock, proc = transformation AT semi stage)
-            'Semi Wait': s.get('semi_stock', 0), 'Semi Pipe': round(in_semi_pipe, 1), 'Semi Proc': s.get('fp_input', 0),
-            # RM stage (wait = buffer stock, proc = transformation AT RM stage)
-            'RM Wait': s.get('raw_mat_stock', 0), 'RM Proc': s.get('semi_input', 0), 'Mat Pipe': round(in_mat_pipe, 1),
+            # Semi stage
+            'Semi Wait': s.get('semi_stock', 0), 'Semi Pipe': round(in_semi_pipe, 1),
+            # RM stage
+            'RM Wait': s.get('raw_mat_stock', 0), 'Mat Pipe': round(in_mat_pipe, 1),
             # Totals
             'WIP': s.get('wip_total', 0),
             'Order': s['order'], 'Pending': s['pending'],
@@ -1344,8 +1368,7 @@ with st.expander("\U0001f4ca Detailed Week-by-Week Data", expanded=False):
             'Margin': round(wk_margin),
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, height=500)
-    st.caption("**RM Proc** = units transformed at RM stage (RM\u2192Semi). "
-               "**Semi Proc** = units transformed at Semi stage (Semi\u2192FP). "
+    st.caption("**CW Wait** = stock sitting in CW. **CW Pipe** = units shipped from CW toward stores this week. "
                "**Costs**: all anticipated 1wk before arrival (RM @50%, Semi +25%, FP +25%).")
 
 # ════════════════════════════════════════════════════════════════
