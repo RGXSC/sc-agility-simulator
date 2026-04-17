@@ -473,25 +473,19 @@ def make_sc_html(state, params):
     C_SUP_BG = '#1a2744'; C_SUP_FG = '#ffffff'
     C_LOST_BG = '#f8e8e8'; C_LOST_BDR = '#c05050'; C_LOST_FG = '#8a2020'
 
-    # Adaptive box sizing: fit everything in ~1400px viewport width
-    # Total boxes in a row = largest stage's row-width (capped at 8 per wrap)
-    # Plus ~3 side cards (supplier + 2 stores) + gaps
+    # Box sizing: compute based on available width
+    # Supplier + 2 store cards have a FIXED minimum width for readability
     max_stage = max(mat_lt, semi_lt, fp_lt, dist_lt)
-    boxes_in_widest_row = min(max_stage, 8)
-    # Total boxes across all stages (single row): mat + semi + fp + dist (up to 8 each)
     total_boxes_row = min(mat_lt, 8) + min(semi_lt, 8) + min(fp_lt, 8) + min(dist_lt, 8)
 
-    # Target: total_boxes_row * (box_w + gap) + 3 cards * (box_w + 14 + gap) <= 1300
-    # Solve for box_w
+    CARD_W = 84  # fixed width for supplier/store cards — never shrinks
     available_width = 1300
-    side_cards = 3  # supplier + 2 stores
+    # Remaining width for boxes after subtracting 3 cards + gaps
+    box_budget = available_width - 3 * CARD_W - 60
     gap = 3
-    # total = total_boxes_row * (bw + gap) + side_cards * (bw + 14 + gap) + extra_gaps
-    # extra gaps between stage groups: 5 * 10 = 50
-    extra = 50 + side_cards * 14
-    target_bw = (available_width - extra) / (total_boxes_row + side_cards) - gap
-    box_w = max(48, min(110, int(target_bw)))
-    box_h = max(50, min(74, box_w - 12))
+    target_bw = (box_budget / total_boxes_row) - gap
+    box_w = max(44, min(110, int(target_bw)))
+    box_h = max(50, min(74, box_w - 8))
 
     def week_box(qty, is_proc=False):
         """Render one week slot with quantity (or empty). Modern flat style, no harsh borders."""
@@ -666,15 +660,15 @@ def make_sc_html(state, params):
     sup_cap = state.get('supplier_cap', 0)
     sup_html = (
         f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
-        f'{band_header("Order", box_w + 14)}'
-        f'<div style="width:{box_w + 14}px;height:{box_h + 20}px;background:#2a3a52;'
+        f'{band_header("Order", CARD_W)}'
+        f'<div style="width:{CARD_W}px;height:{box_h + 20}px;background:#2a3a52;'
         f'border-radius:6px;padding:4px 6px;'
         f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
         f'color:#fff;box-sizing:border-box;">'
         f'<div style="font-size:10px;font-weight:500;color:#9aaec6;text-transform:uppercase;letter-spacing:0.5px;">Supplier</div>'
         f'<div style="font-size:20px;font-weight:700;">{sup_qty:.0f}</div>'
         f'</div>'
-        f'<div style="width:{box_w + 14}px;background:#f4f6f9;'
+        f'<div style="width:{CARD_W}px;background:#f4f6f9;'
         f'border-radius:5px;padding:5px 8px;font-size:10px;color:{C_TXT};'
         f'display:flex;justify-content:space-between;box-sizing:border-box;">'
         f'<span style="color:{C_TXT_L};font-weight:500;">Cap</span>'
@@ -709,8 +703,8 @@ def make_sc_html(state, params):
         accent = '#c05050' if is_alert else 'transparent'
         return (
             f'<div style="display:flex;flex-direction:column;gap:3px;">'
-            f'{band_header(f"Store {letter}", box_w + 14)}'
-            f'<div style="width:{box_w + 14}px;background:{bg};'
+            f'{band_header(f"Store {letter}", CARD_W)}'
+            f'<div style="width:{CARD_W}px;background:{bg};'
             f'{"box-shadow: inset 3px 0 0 "+accent+";" if is_alert else ""}'
             f'border-radius:6px;padding:8px 8px;text-align:center;box-sizing:border-box;'
             f'font-size:10px;color:{C_TXT};">'
@@ -779,7 +773,7 @@ def make_sc_html(state, params):
     # Calculate the intrinsic width of the diagram (approx)
     # total_boxes_row * (bw + 3) + 3 cards (supplier + 2 stores) + gaps
     intrinsic_w = (min(mat_lt,8) + min(semi_lt,8) + min(fp_lt,8) + min(dist_lt,8)) * (box_w + 3)
-    intrinsic_w += 3 * (box_w + 14) + 60  # cards + gaps
+    intrinsic_w += 3 * (CARD_W) + 60  # cards + gaps
 
     container = (
         f'<div style="font-family:Arial,Helvetica,sans-serif;padding:8px;'
