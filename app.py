@@ -511,13 +511,13 @@ def make_sc_html(state, params):
                 f'font-weight:600;color:#2a3a4e;box-sizing:border-box;">{label}</div>')
 
     def wip_label(label, value, width_px):
-        """WIP total shown below a band. Minimal — no border, just subtle bg."""
-        return (f'<div style="width:{width_px}px;background:#f4f6f9;'
-                f'border-radius:5px;padding:5px 8px;display:flex;'
-                f'justify-content:space-between;align-items:center;'
+        """WIP total below a band — visible accent to link it to its stage."""
+        return (f'<div style="width:{width_px}px;background:#e4e9f0;'
+                f'border-left:3px solid #4a6280;border-radius:4px;padding:5px 8px;'
+                f'display:flex;justify-content:space-between;align-items:center;'
                 f'font-size:11px;color:{C_TXT};box-sizing:border-box;">'
-                f'<span style="font-weight:500;color:{C_TXT_L};">{label}</span>'
-                f'<span style="font-weight:700;color:#2a3a4e;">{value:.0f}</span></div>')
+                f'<span style="font-weight:600;color:#4a6280;">{label}</span>'
+                f'<span style="font-weight:800;color:#1a2a3e;font-size:12px;">{value:.0f}</span></div>')
 
     # === BUILD WEEK-BY-WEEK CONTENT ===
     # Map pipes to weeks (W1 = leftmost/upstream, W_last = rightmost/downstream)
@@ -719,7 +719,7 @@ def make_sc_html(state, params):
             f'<div style="text-align:center;"><div style="color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.3px;">Dem</div><div style="font-size:13px;font-weight:600;color:{C_TXT};line-height:1.1;margin-top:2px;">{dem:.0f}</div></div>'
             f'<div style="text-align:center;"><div style="color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.3px;">Sold</div><div style="font-size:13px;font-weight:600;color:#2a5a3a;line-height:1.1;margin-top:2px;">{sales:.0f}</div></div>'
             f'</div>'
-            f'{"<div style=margin-top:6px;background:#c05050;color:#fff;padding:2px 4px;border-radius:4px;font-size:10px;font-weight:700;>LOST "+str(int(lost))+"</div>" if is_alert else ""}'
+            f'{"<div style=margin-top:5px;background:#c05050;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:0.3px;display:inline-block;>LOST "+str(int(lost))+"</div>" if is_alert else ""}'
             f'</div></div>'
         )
 
