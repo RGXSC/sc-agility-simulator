@@ -478,7 +478,7 @@ def make_sc_html(state, params):
     max_stage = max(mat_lt, semi_lt, fp_lt, dist_lt)
     total_boxes_row = min(mat_lt, 8) + min(semi_lt, 8) + min(fp_lt, 8) + min(dist_lt, 8)
 
-    CARD_W = 84  # fixed width for supplier/store cards — never shrinks
+    CARD_W = 98  # fixed width for supplier/store cards
     available_width = 1300
     # Remaining width for boxes after subtracting 3 cards + gaps
     box_budget = available_width - 3 * CARD_W - 60
@@ -677,18 +677,23 @@ def make_sc_html(state, params):
     )
 
     # Stage columns
-    mat_col = stage_col(f"Material ({mat_lt}wk)", mat_weeks, mat_band_w,
+    mat_label = f"Mat ({mat_lt}wk)" if mat_lt <= 2 else f"Material ({mat_lt}wk)"
+    semi_label = f"Semi ({semi_lt}wk)"
+    fp_label = f"Finish ({fp_lt}wk)" if fp_lt <= 2 else f"Finish+CW ({fp_lt}wk)"
+    mat_col = stage_col(mat_label, mat_weeks, mat_band_w,
                         wip_mat, "WIP", 1)
-    semi_col = stage_col(f"Semi ({semi_lt}wk)", semi_weeks, semi_band_w,
+    semi_col = stage_col(semi_label, semi_weeks, semi_band_w,
                          wip_semi, "WIP", mat_lt + 1)
-    fp_col = stage_col(f"Finish+CW ({fp_lt}wk)", fp_weeks, fp_band_w,
+    fp_col = stage_col(fp_label, fp_weeks, fp_band_w,
                        wip_fp, "WIP", mat_lt + semi_lt + 1)
 
     # Distribution band: show combined total per week (A+B)
     dist_combined = [dist_a_weeks[i] + dist_b_weeks[i] for i in range(len(dist_a_weeks))] if dist_a_weeks else []
+    # Shorter label when band is narrow (few boxes)
+    dist_label = f"Dist ({dist_lt}wk)" if dist_lt <= 2 else f"Distribution ({dist_lt}wk)"
     dist_col = (
         f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
-        f'{band_header(f"Distribution ({dist_lt}wk)", dist_band_w)}'
+        f'{band_header(dist_label, dist_band_w)}'
         f'<div>{boxes_row(dist_combined, proc_last=True, weeks_labels_start=mat_lt + semi_lt + fp_lt + 1)}</div>'
         f'<div style="display:flex;flex-direction:column;gap:3px;width:{dist_band_w}px;">'
         f'{wip_label("WIP A", wip_dist_a, dist_band_w)}'
@@ -706,15 +711,15 @@ def make_sc_html(state, params):
             f'{band_header(f"Store {letter}", CARD_W)}'
             f'<div style="width:{CARD_W}px;background:{bg};'
             f'{"box-shadow: inset 3px 0 0 "+accent+";" if is_alert else ""}'
-            f'border-radius:6px;padding:8px 8px;text-align:center;box-sizing:border-box;'
-            f'font-size:10px;color:{C_TXT};">'
-            f'<div style="color:{C_TXT_L};font-weight:500;font-size:9px;text-transform:uppercase;letter-spacing:0.4px;">Stock</div>'
-            f'<div style="font-size:18px;font-weight:700;color:{C_TXT};margin:2px 0 4px;">{stock:.0f}</div>'
-            f'<div style="display:flex;justify-content:space-around;margin-top:4px;">'
-            f'<div><div style="color:{C_TXT_L};font-size:9px;text-transform:uppercase;">Dem</div><div style="font-size:12px;font-weight:600;">{dem:.0f}</div></div>'
-            f'<div><div style="color:{C_TXT_L};font-size:9px;text-transform:uppercase;">Sold</div><div style="font-size:12px;font-weight:600;color:#2a5a3a;">{sales:.0f}</div></div>'
+            f'border-radius:6px;padding:8px 6px;text-align:center;box-sizing:border-box;'
+            f'color:{C_TXT};">'
+            f'<div style="color:{C_TXT_L};font-weight:500;font-size:9px;text-transform:uppercase;letter-spacing:0.3px;">Stock</div>'
+            f'<div style="font-size:20px;font-weight:700;color:{C_TXT};line-height:1.1;margin:2px 0 6px;">{stock:.0f}</div>'
+            f'<div style="display:flex;justify-content:space-between;padding:0 6px;gap:8px;font-size:9px;">'
+            f'<div style="text-align:center;"><div style="color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.3px;">Dem</div><div style="font-size:13px;font-weight:600;color:{C_TXT};line-height:1.1;margin-top:2px;">{dem:.0f}</div></div>'
+            f'<div style="text-align:center;"><div style="color:{C_TXT_L};text-transform:uppercase;letter-spacing:0.3px;">Sold</div><div style="font-size:13px;font-weight:600;color:#2a5a3a;line-height:1.1;margin-top:2px;">{sales:.0f}</div></div>'
             f'</div>'
-            f'{"<div style=margin-top:6px;background:#c05050;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;>LOST "+str(int(lost))+"</div>" if is_alert else ""}'
+            f'{"<div style=margin-top:6px;background:#c05050;color:#fff;padding:2px 4px;border-radius:4px;font-size:10px;font-weight:700;>LOST "+str(int(lost))+"</div>" if is_alert else ""}'
             f'</div></div>'
         )
 
