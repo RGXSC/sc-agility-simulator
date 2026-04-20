@@ -22,7 +22,7 @@ DEMAND_SHAPES = [
     "\u27a1\ufe0f Flat (constant demand)",
     "\U0001f4c8 Linear ramp then flat",
     "\U0001f4c9 Linear drop then flat",
-    "\U0001f514 Poisson curve (launch peak)",
+    "\U0001f33f Seasonal (curve profile)",
 ]
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -933,21 +933,53 @@ with st.sidebar:
             init_demand.append(max(0, int(round(val))))
         demand_description = f"Drop {bf}\u2192{drop_dem} in {drop_wks}wk"
 
-    else:  # Poisson
-        if "pk_wk" not in st.session_state:
-            st.session_state["pk_wk"] = min(weeks // 3, 8)
-        if "pk_h" not in st.session_state:
-            st.session_state["pk_h"] = min(bf * 4, 1000)
-        if "pk_sp" not in st.session_state:
-            st.session_state["pk_sp"] = 4.0
-        peak_wk = st.slider("Peak week", min_value=1, max_value=weeks, step=1, key="pk_wk")
-        peak_h = st.slider("Peak demand (pcs/wk)", min_value=bf, max_value=1000, step=10, key="pk_h")
-        spread = st.slider("Spread (weeks)", min_value=1.0, max_value=float(max(2, weeks // 2)), step=0.5, key="pk_sp")
+    else:  # Seasonal
+        if "seas_sub" not in st.session_state:
+            st.session_state["seas_sub"] = "Steep"
+        if "seas_avg" not in st.session_state:
+            st.session_state["seas_avg"] = 100
+
+        seas_sub = st.radio("Profile shape", ["Very Steep", "Steep", "~Flat"],
+                            key="seas_sub", horizontal=True)
+        seas_avg = st.slider("Average weekly demand", min_value=0, max_value=1000,
+                             step=10, key="seas_avg")
+
+        # Gamma params for each sub-profile: (peak_position_ratio, shape_k, scale_theta)
+        # Peak position scales with simulation length (ratio of 26 weeks baseline)
+        # Very Steep: peak at W3 (ratio 3/26), k=2.5, theta=2, peak ~4x avg
+        # Steep:      peak at W6 (ratio 6/26), k=3.0, theta=3, peak ~2x avg
+        # ~Flat:      peak at W13 (ratio 13/26), k=5.0, theta=3, peak ~1.2x avg
+        seas_params = {
+            "Very Steep": (3.0/26.0, 2.5, 2.0),
+            "Steep":      (6.0/26.0, 3.0, 3.0),
+            "~Flat":      (13.0/26.0, 5.0, 3.0),
+        }
+        ratio, k, theta = seas_params[seas_sub]
+
+        # Scale theta to simulation length so peak position = ratio * weeks
+        # Gamma mode = (k-1)*theta. We want mode = ratio*weeks.
+        scaled_theta = (ratio * weeks) / max(k - 1, 0.1)
+
+        # Build gamma PDF at week positions 1..weeks
+        from math import gamma as gamma_fn, exp as math_exp
+        def gamma_pdf(x, kk, tt):
+            if x <= 0: return 0.0
+            return (x ** (kk - 1)) * math_exp(-x / tt) / ((tt ** kk) * gamma_fn(kk))
+
+        pdf_vals = [gamma_pdf(w, k, scaled_theta) for w in range(1, weeks + 1)]
+        pdf_sum = sum(pdf_vals)
+
+        total_units = seas_avg * weeks
         init_demand = [0]
-        for w in range(1, weeks + 1):
-            val = peak_h * np.exp(-0.5 * ((w - peak_wk) / spread) ** 2) + bf * 0.05
-            init_demand.append(max(int(round(val)), 0))
-        demand_description = f"Poisson peak {peak_h} at W{peak_wk}"
+        if pdf_sum > 0 and total_units > 0:
+            scale_factor = total_units / pdf_sum
+            for v in pdf_vals:
+                init_demand.append(max(0, int(round(v * scale_factor))))
+        else:
+            for _ in range(weeks):
+                init_demand.append(0)
+
+        demand_description = f"Seasonal {seas_sub} (avg {seas_avg}/wk, total {total_units})"
 
     st.caption(f"**{demand_description}**")
 
@@ -1182,7 +1214,12 @@ st.markdown("")
 _max_stage = max(params['mat_lt'], params['semi_lt'], params['fp_lt'], params['dist_lt'])
 import math as _m
 _rows_needed = _m.ceil(_max_stage / 8)
-_viz_h = 240 + _rows_needed * 80
+# Height must fit: info bar (~50) + padding (~40) + stage content (depends on rows)
+# + 2 stacked store cards (~150 each + 6px gap = ~310) + physical flow marker (~30)
+# Stage content: 20 (label) + 22 (week label) + box_h (~60) + 30 (wip) per row + 6px gap
+_stage_h = _rows_needed * 110
+_stores_h = 2 * 150 + 10  # 2 store cards + gap
+_viz_h = 90 + max(_stage_h, _stores_h) + 40  # base + max(stages, stores) + bottom
 st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=False)
 
 # ════════════════════════════════════════════════════════════════
