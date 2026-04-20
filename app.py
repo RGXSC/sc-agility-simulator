@@ -22,7 +22,7 @@ DEMAND_SHAPES = [
     "\u27a1\ufe0f Flat (constant demand)",
     "\U0001f4c8 Linear ramp then flat",
     "\U0001f4c9 Linear drop then flat",
-    "\U0001f33f Seasonal (curve profile)",
+    "\U0001f30a Seasonal (curve profile)",
 ]
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -944,29 +944,26 @@ with st.sidebar:
         seas_avg = st.slider("Average weekly demand", min_value=0, max_value=1000,
                              step=10, key="seas_avg")
 
-        # Gamma params for each sub-profile: (peak_position_ratio, shape_k, scale_theta)
-        # Peak position scales with simulation length (ratio of 26 weeks baseline)
-        # Very Steep: peak at W3 (ratio 3/26), k=2.5, theta=2, peak ~4x avg
-        # Steep:      peak at W6 (ratio 6/26), k=3.0, theta=3, peak ~2x avg
-        # ~Flat:      peak at W13 (ratio 13/26), k=5.0, theta=3, peak ~1.2x avg
+        # Gamma params — all sub-profiles: (peak_position_ratio, shape_k)
+        # scale theta is computed from peak position and sim length
+        # Very Steep: early peak W3 (4x avg), fast decay
+        # Steep:      peak W6 (2x avg), moderate decay
+        # ~Flat:      peak W6 but very wide shape (k=1.8) → gentle dome, tail ~35
         seas_params = {
-            "Very Steep": (3.0/26.0, 2.5, 2.0),
-            "Steep":      (6.0/26.0, 3.0, 3.0),
-            "~Flat":      (13.0/26.0, 5.0, 3.0),
+            "Very Steep": (3.0/26.0, 2.5),
+            "Steep":      (6.0/26.0, 3.0),
+            "~Flat":      (6.0/26.0, 1.8),
         }
-        ratio, k, theta = seas_params[seas_sub]
 
-        # Scale theta to simulation length so peak position = ratio * weeks
-        # Gamma mode = (k-1)*theta. We want mode = ratio*weeks.
-        scaled_theta = (ratio * weeks) / max(k - 1, 0.1)
-
-        # Build gamma PDF at week positions 1..weeks
         from math import gamma as gamma_fn, exp as math_exp
         def gamma_pdf(x, kk, tt):
             if x <= 0: return 0.0
             return (x ** (kk - 1)) * math_exp(-x / tt) / ((tt ** kk) * gamma_fn(kk))
 
+        ratio, k = seas_params[seas_sub]
+        scaled_theta = (ratio * weeks) / max(k - 1, 0.1)
         pdf_vals = [gamma_pdf(w, k, scaled_theta) for w in range(1, weeks + 1)]
+
         pdf_sum = sum(pdf_vals)
 
         total_units = seas_avg * weeks
