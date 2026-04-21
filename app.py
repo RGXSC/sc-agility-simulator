@@ -785,26 +785,26 @@ def make_sc_html(state, params):
         f'background:linear-gradient(90deg,#f6f8fa,#f0f2f6);'
         f'border:1px solid #dde2ea;border-radius:12px;'
         f'width:100%;box-sizing:border-box;overflow:hidden;">'
-        # Scaler wrapper: JS adjusts transform:scale() to fit parent width
         f'<div id="sc-scaler" style="transform-origin:top left;width:{intrinsic_w}px;">'
         f'{main}</div>'
+        f'</div>'
         f'<script>'
         f'(function(){{'
         f'  var scaler=document.getElementById("sc-scaler");'
         f'  if(!scaler) return;'
         f'  var natural={intrinsic_w};'
+        f'  var wrapper=scaler.parentElement;'
         f'  function fit(){{'
-        f'    var avail=scaler.parentElement.clientWidth - 16;'
+        f'    var avail=wrapper.clientWidth - 16;'
         f'    var scale=Math.min(1, avail/natural);'
         f'    scaler.style.transform="scale("+scale+")";'
-        f'    scaler.parentElement.style.height=(scaler.offsetHeight*scale)+"px";'
+        f'    wrapper.style.height=(scaler.offsetHeight*scale + 16)+"px";'
         f'  }}'
         f'  fit();'
         f'  window.addEventListener("resize",fit);'
         f'  setTimeout(fit,100);setTimeout(fit,500);'
         f'}})();'
         f'</script>'
-        f'</div>'
     )
 
     return f'<div style="font-family:Arial,Helvetica,sans-serif;">{info_bar}{container}{physical_flow}{comment_html}</div>'
@@ -1211,11 +1211,13 @@ st.markdown("")
 _max_stage = max(params['mat_lt'], params['semi_lt'], params['fp_lt'], params['dist_lt'])
 import math as _m
 _rows_needed = _m.ceil(_max_stage / 8)
-# Height must fit: info bar + padding + stage content + 2 stacked store cards (with LOST badge)
-# + physical flow marker + comment. Store cards with LOST badge are ~175px each.
-_stage_h = _rows_needed * 110
-_stores_h = 2 * 175 + 10  # 2 store cards (with LOST badge) + gap
-_viz_h = 90 + max(_stage_h, _stores_h) + 60  # base + max(stages, stores) + bottom breathing room
+# Tight height calculation:
+#   Per stage row: ~145px (header + labels + boxes + wip + gaps)
+#   Store card: ~118px each (with LOST badge) × 2 + 10 gap + 28 header = 274px
+_stage_h = _rows_needed * 145
+_stores_h = 2 * 118 + 10 + 28  # stores with LOST badge
+_content_h = max(_stage_h, _stores_h)
+_viz_h = 48 + 16 + _content_h + 28 + 32  # info + padding + content + phys + comment
 st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=False)
 
 # ════════════════════════════════════════════════════════════════
