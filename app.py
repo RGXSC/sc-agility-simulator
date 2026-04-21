@@ -1217,7 +1217,6 @@ _stage_h = _rows_needed * 110
 _stores_h = 2 * 175 + 10  # 2 store cards (with LOST badge) + gap
 _viz_h = 90 + max(_stage_h, _stores_h) + 60  # base + max(stages, stores) + bottom breathing room
 st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=False)
-st.components.v1.html(make_sc_html(state, params), height=_viz_h, scrolling=False)
 
 # ════════════════════════════════════════════════════════════════
 # DEMAND CHART (point 7: hidden by default in expander)
