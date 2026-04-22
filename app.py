@@ -127,10 +127,11 @@ def run_simulation(weeks, init_store, init_cw, init_semi, init_rawmat,
         'dist_pipe_b': [0.0] * max(1, dist_lt),
         'order': 0, 'pending': 0, 'backlog': 0,
         'wip_total': 0,
-        # Point 4: initial stock costs (valorized at their stage)
-        'cost_mat': round(init_rawmat * var_cost * VALOR_RAW_MAT, 1),
-        'cost_semi': round(init_semi * var_cost * VALOR_SEMI, 1),
-        'cost_fp': round((init_store + init_cw) * var_cost * VALOR_FINISHED, 1),
+        # W0 has no production costs — initial stock is valorized separately
+        # via init_stock_value in compute_kpis (avoids double counting)
+        'cost_mat': 0.0,
+        'cost_semi': 0.0,
+        'cost_fp': 0.0,
         'coverage': coverage,
         'comment': "Week 0 - Initial state.",
     }
@@ -1336,9 +1337,9 @@ with st.expander("\U0001f4cb P&L Summary (end of simulation)", expanded=False):
             f"{fk['total_sales']:,.0f} pcs x \u20ac{price}",
             "",
             f"Store/WH @100% + Semi @75% + RM @50%",
-            f"{sum(s.get('supplier_shipped',0) for s in states[1:]):.0f} pcs x \u20ac{var_cost*VALOR_RAW_MAT:.0f}",
-            f"Incremental \u20ac{var_cost*(VALOR_SEMI-VALOR_RAW_MAT):.0f}/pc",
-            f"Incremental \u20ac{var_cost*(VALOR_FINISHED-VALOR_SEMI):.0f}/pc",
+            f"{fk['cost_mat_total']/(var_cost*VALOR_RAW_MAT):.0f} pcs x \u20ac{var_cost*VALOR_RAW_MAT:.0f} (units reaching last wk of Material)",
+            f"{fk['cost_semi_total']/(var_cost*(VALOR_SEMI-VALOR_RAW_MAT)):.0f} pcs x \u20ac{var_cost*(VALOR_SEMI-VALOR_RAW_MAT):.0f} (units reaching last wk of Semi)",
+            f"{fk['cost_fp_total']/(var_cost*(VALOR_FINISHED-VALOR_SEMI)):.0f} pcs x \u20ac{var_cost*(VALOR_FINISHED-VALOR_SEMI):.0f} (units reaching last wk of Finishing)",
             f"Init stock + production costs",
             "",
             f"Revenue - Variable Costs",
