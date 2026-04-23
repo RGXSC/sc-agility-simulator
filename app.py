@@ -839,11 +839,66 @@ with st.sidebar:
 
     # 3. INITIAL STOCK
     st.markdown("### \U0001f4e6 Initial Stock")
-    recommended_stock = base_forecast * coverage
+
+    # Render demand-shape SELECTOR early so the recommendation below can react to it.
+    # The rest of the demand controls (ramp/drop sliders, seasonal avg) also need to be
+    # read here, so we render their widgets inline too when relevant.
+    _tmp_col = st.container()
+    with _tmp_col:
+        _preset_shape_hint = st.session_state.get("demand_shape", DEMAND_SHAPES[0])
+        # Preview selector — users can also change it in the Demand Profile section below
+        # We use a unique internal key that mirrors demand_shape via callback
+        pass  # No early widget; use existing session_state values directly.
+
+    # Smart recommendation: cover demand during the first LT+freq weeks of sim.
+    # For seasonal profiles, compute sum of first N weeks of the curve (not just avg × N).
+    _ds = st.session_state.get("demand_shape", DEMAND_SHAPES[0])
+    _first_n = min(coverage, weeks)
+    if "Seasonal" in _ds:
+        from math import gamma as _gf, exp as _exp
+        _sub = st.session_state.get("seas_sub", "Steep")
+        _avg = st.session_state.get("seas_avg", 100)
+        _params = {"Very Steep": (3.0/26.0, 2.5), "Steep": (6.0/26.0, 3.0), "~Flat": (6.0/26.0, 1.8)}
+        _ratio, _k = _params.get(_sub, (6.0/26.0, 3.0))
+        _theta = (_ratio * weeks) / max(_k - 1, 0.1)
+        def _gp(x, kk, tt):
+            if x <= 0: return 0.0
+            return (x ** (kk - 1)) * _exp(-x / tt) / ((tt ** kk) * _gf(kk))
+        _pdf = [_gp(w, _k, _theta) for w in range(1, weeks + 1)]
+        _psum = sum(_pdf) or 1
+        _scaled = [v * _avg * weeks / _psum for v in _pdf]
+        recommended_stock = int(round(sum(_scaled[:_first_n])))
+        _reco_detail = f"sum of first {_first_n} wks of {_sub} curve (avg {_avg}/wk)"
+    elif "ramp" in _ds.lower():
+        _end = st.session_state.get("lr_end", base_forecast * 3)
+        _rw = st.session_state.get("lr_wks", min(weeks // 3, 8))
+        _total = 0
+        for w in range(1, _first_n + 1):
+            if w <= _rw:
+                _total += base_forecast + (_end - base_forecast) * w / _rw
+            else:
+                _total += _end
+        recommended_stock = int(round(_total))
+        _reco_detail = f"first {_first_n} wks of ramp curve"
+    elif "drop" in _ds.lower():
+        _floor = st.session_state.get("ld_end", max(0, base_forecast // 3))
+        _dw = st.session_state.get("ld_wks", 1)
+        _total = 0
+        for w in range(1, _first_n + 1):
+            if w <= _dw:
+                _total += base_forecast + (_floor - base_forecast) * w / _dw
+            else:
+                _total += _floor
+        recommended_stock = int(round(_total))
+        _reco_detail = f"first {_first_n} wks of drop curve"
+    else:
+        recommended_stock = base_forecast * _first_n
+        _reco_detail = f"{base_forecast}/wk \u00d7 {_first_n} wks coverage"
+
     st.markdown(
         f'<div style="color:#8a96a6;font-size:12px;font-style:italic;margin-bottom:8px;">'
         f'[Recommended: <b>{recommended_stock:,.0f}</b> pcs = '
-        f'{base_forecast}/wk \u00d7 {coverage} wks coverage]</div>',
+        f'{_reco_detail}] <span style="color:#a8b4c4;">— based on demand profile "{_ds}"</span></div>',
         unsafe_allow_html=True)
     total_stock = st.slider("Total Initial Stock (pcs)", min_value=0, max_value=10000, step=50, key="total_stock")
 
